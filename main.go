@@ -1,0 +1,195 @@
+// main.go
+package main
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"github.com/blugelabs/bluge"
+	"github.com/schollz/progressbar/v3"
+	"log"
+	"os"
+	"strconv"
+	"strings"
+)
+
+// Used to convert beir data into formate for go bm25
+func index_stuff() {
+	// 1) SCIFACT
+	loadBeirJSONL("/home/yelnat/Documents/Nextcloud/10TB-STHDD/Sync-Folder-STHDD/datasets/scifact/corpus.jsonl", "index_scifact")
+
+	// 2) TREC-COVID
+	// loadBeirJSONL("/home/yelnat/Documents/Nextcloud/10TB-STHDD/Sync-Folder-STHDD/datasets/trec-covid/corpus.jsonl", "index_trec_covid")
+
+	// 3) MSMARCO passage
+	// loadMSMARCO("/home/yelnat/Documents/Nextcloud/10TB-STHDD/Sync-Folder-STHDD/datasets/msmarco/collection.tsv", "index_msmarco")
+
+	log.Println("✅  All indices built.")
+}
+
+type query struct {
+	ID   string `json:"_id"`
+	Text string `json:"text"`
+}
+
+type qrels map[string]map[string]int
+
+func loadQueries(path string) ([]query, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var qs []query
+	sc := bufio.NewScanner(f)
+	// allow long queries
+	sc.Buffer(make([]byte, 1024), 1024*1024)
+	for sc.Scan() {
+		var q query
+		if err := json.Unmarshal(sc.Bytes(), &q); err == nil {
+			qs = append(qs, q)
+		}
+	}
+	return qs, sc.Err()
+}
+
+func loadQrels(path string) (qrels, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	rel := make(qrels)
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := strings.Fields(sc.Text())
+		if len(line) < 3 {
+			continue
+		}
+		qid, docid, score := line[0], line[1], line[2]
+		v, _ := strconv.Atoi(score)
+		if v <= 0 {
+			continue
+		}
+		if _, ok := rel[qid]; !ok {
+			rel[qid] = make(map[string]int)
+		}
+		rel[qid][docid] = v
+	}
+	return rel, sc.Err()
+}
+
+// ----------------- evaluation ----------------------------------------------
+
+func mrrAtK(idxPath, queriesPath, qrelsPath string, k int) float64 {
+
+	qs, err := loadQueries(queriesPath)
+	must(err)
+	rels, err := loadQrels(qrelsPath)
+	must(err)
+
+	reader, err := bluge.OpenReader(bluge.DefaultConfig(idxPath))
+	must(err)
+	defer reader.Close()
+
+	bar := progressbar.Default(int64(len(qs)), fmt.Sprintf("eval %s", idxPath))
+
+	var sumRR float64
+	for _, q := range qs {
+
+		// simple: match query text against both title and body
+		matchTitle := bluge.NewMatchQuery(q.Text).SetField("title")
+		matchBody := bluge.NewMatchQuery(q.Text).SetField("body")
+		boolean := bluge.NewBooleanQuery().
+			AddShould(matchTitle).
+			AddShould(matchBody)
+
+		req := bluge.NewTopNSearch(k, boolean)
+		it, err := reader.Search(context.Background(), req)
+
+		must(err)
+
+		rr := 0.0
+		for rank := 1; rank <= k; rank++ {
+			match, err := it.Next()
+			if err != nil {
+				break
+			}
+			if match == nil {
+				break
+			}
+
+			// pull out the stored "_id" field instead of match.ID()
+			var docID string
+			err = match.VisitStoredFields(func(field string, value []byte) bool {
+				if field == "_id" {
+					docID = string(value)
+					return false // stop visiting as soon as we have the id
+				}
+				return true // keep scanning other stored fields
+			})
+			must(err)
+
+			if rels[q.ID][docID] > 0 {
+				rr = 1.0 / float64(rank)
+				break
+			}
+		}
+
+		sumRR += rr
+		bar.Add(1)
+	}
+
+	return sumRR / float64(len(qs))
+}
+
+// --------------------------- main -------------------------------------------
+
+func main() {
+
+	index_stuff()
+
+	root := "/home/yelnat/Documents/Nextcloud/10TB-STHDD/Sync-Folder-STHDD/datasets"
+	debugScifactFull(
+		"index_scifact",
+		root+"/scifact/queries.jsonl",
+		root+"/scifact/qrels/test.tsv",
+		5,  // number of queries to sample
+		10, // Top-K to print
+	)
+
+	k := flag.Int("k", 100, "MRR@k cutoff")
+	flag.Parse()
+
+	fmt.Println("---------- MRR evaluation ----------")
+	fmt.Printf("k = %d\n\n", *k)
+
+	datasets := []struct {
+		name     string
+		indexDir string
+		queries  string
+		qrels    string
+	}{
+		{
+			"SciFact",
+			"index_scifact", // index folders you created earlier
+			root + "/scifact/queries.jsonl",
+			root + "/scifact/qrels/test.tsv",
+		},
+		{
+			"TREC-COVID",
+			"index_trec_covid",
+			root + "/trec-covid/queries.jsonl",
+			root + "/trec-covid/qrels/test.tsv",
+		},
+	}
+
+	for _, d := range datasets {
+		mrr := mrrAtK(d.indexDir, d.queries, d.qrels, *k)
+		fmt.Printf("%-10s : MRR@%d = %.5f\n", d.name, *k, mrr)
+	}
+}
