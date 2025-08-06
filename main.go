@@ -5,10 +5,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
+
 	"github.com/blugelabs/bluge"
 	"github.com/schollz/progressbar/v3"
 	"github.com/sirupsen/logrus"
-	"log"
 )
 
 // Used to convert beir data into formate for go bm25
@@ -93,7 +94,7 @@ func mrrAtK(idxPath, queriesPath, qrelsPath string, k int) float64 {
 
 func main() {
 
-	// index_stuff()
+	index_stuff()
 
 	// 1. Set global log level (Trace, Debug, Info, Warn, Error, Fatal, Panic)
 	logrus.SetLevel(logrus.DebugLevel)
