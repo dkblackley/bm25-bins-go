@@ -18,7 +18,7 @@ func index_stuff() {
 	loadBeirJSONL("/home/yelnat/Documents/Nextcloud/10TB-STHDD/Sync-Folder-STHDD/datasets/scifact/corpus.jsonl", "index_scifact")
 
 	// 2) TREC-COVID
-	// loadBeirJSONL("/home/yelnat/Documents/Nextcloud/10TB-STHDD/Sync-Folder-STHDD/datasets/trec-covid/corpus.jsonl", "index_trec_covid")
+	loadBeirJSONL("/home/yelnat/Documents/Nextcloud/10TB-STHDD/Sync-Folder-STHDD/datasets/trec-covid/corpus.jsonl", "index_trec_covid")
 
 	// 3) MSMARCO passage
 	// loadMSMARCO("/home/yelnat/Documents/Nextcloud/10TB-STHDD/Sync-Folder-STHDD/datasets/msmarco/collection.tsv", "index_msmarco")
@@ -94,7 +94,7 @@ func mrrAtK(idxPath, queriesPath, qrelsPath string, k int) float64 {
 
 func main() {
 
-	index_stuff()
+	// index_stuff()
 
 	// 1. Set global log level (Trace, Debug, Info, Warn, Error, Fatal, Panic)
 	logrus.SetLevel(logrus.DebugLevel)
@@ -131,12 +131,12 @@ func main() {
 			root + "/scifact/queries.jsonl",
 			root + "/scifact/qrels/test.tsv",
 		},
-		//{
-		//	"TREC-COVID",
-		//	"index_trec_covid",
-		//	root + "/trec-covid/queries.jsonl",
-		//	root + "/trec-covid/qrels/test.tsv",
-		//},
+		{
+			"TREC-COVID",
+			"index_trec_covid",
+			root + "/trec-covid/queries.jsonl",
+			root + "/trec-covid/qrels/test.tsv",
+		},
 	}
 
 	for _, d := range datasets {
