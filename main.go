@@ -2,17 +2,13 @@
 package main
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/blugelabs/bluge"
 	"github.com/schollz/progressbar/v3"
+	"github.com/sirupsen/logrus"
 	"log"
-	"os"
-	"strconv"
-	"strings"
 )
 
 // Used to convert beir data into formate for go bm25
@@ -27,60 +23,6 @@ func index_stuff() {
 	// loadMSMARCO("/home/yelnat/Documents/Nextcloud/10TB-STHDD/Sync-Folder-STHDD/datasets/msmarco/collection.tsv", "index_msmarco")
 
 	log.Println("✅  All indices built.")
-}
-
-type query struct {
-	ID   string `json:"_id"`
-	Text string `json:"text"`
-}
-
-type qrels map[string]map[string]int
-
-func loadQueries(path string) ([]query, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	var qs []query
-	sc := bufio.NewScanner(f)
-	// allow long queries
-	sc.Buffer(make([]byte, 1024), 1024*1024)
-	for sc.Scan() {
-		var q query
-		if err := json.Unmarshal(sc.Bytes(), &q); err == nil {
-			qs = append(qs, q)
-		}
-	}
-	return qs, sc.Err()
-}
-
-func loadQrels(path string) (qrels, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	rel := make(qrels)
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		line := strings.Fields(sc.Text())
-		if len(line) < 3 {
-			continue
-		}
-		qid, docid, score := line[0], line[1], line[2]
-		v, _ := strconv.Atoi(score)
-		if v <= 0 {
-			continue
-		}
-		if _, ok := rel[qid]; !ok {
-			rel[qid] = make(map[string]int)
-		}
-		rel[qid][docid] = v
-	}
-	return rel, sc.Err()
 }
 
 // ----------------- evaluation ----------------------------------------------
@@ -144,14 +86,22 @@ func mrrAtK(idxPath, queriesPath, qrelsPath string, k int) float64 {
 		bar.Add(1)
 	}
 
-	return sumRR / float64(len(qs))
+	return sumRR / float64(len(rels))
 }
 
 // --------------------------- main -------------------------------------------
 
 func main() {
 
-	index_stuff()
+	// index_stuff()
+
+	// 1. Set global log level (Trace, Debug, Info, Warn, Error, Fatal, Panic)
+	logrus.SetLevel(logrus.DebugLevel)
+
+	// 2. (Optional) customize the formatter
+	logrus.SetFormatter(&logrus.TextFormatter{
+		FullTimestamp: true,
+	})
 
 	root := "/home/yelnat/Documents/Nextcloud/10TB-STHDD/Sync-Folder-STHDD/datasets"
 	debugScifactFull(
@@ -176,16 +126,16 @@ func main() {
 	}{
 		{
 			"SciFact",
-			"index_scifact", // index folders you created earlier
+			"index_scifact", // index folders created earlier
 			root + "/scifact/queries.jsonl",
 			root + "/scifact/qrels/test.tsv",
 		},
-		{
-			"TREC-COVID",
-			"index_trec_covid",
-			root + "/trec-covid/queries.jsonl",
-			root + "/trec-covid/qrels/test.tsv",
-		},
+		//{
+		//	"TREC-COVID",
+		//	"index_trec_covid",
+		//	root + "/trec-covid/queries.jsonl",
+		//	root + "/trec-covid/qrels/test.tsv",
+		//},
 	}
 
 	for _, d := range datasets {

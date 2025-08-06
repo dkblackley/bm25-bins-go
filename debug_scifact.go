@@ -3,9 +3,9 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"github.com/blugelabs/bluge"
 	"github.com/schollz/progressbar/v3"
+	"github.com/sirupsen/logrus"
 )
 
 // debugScifactFull prints:
@@ -26,20 +26,20 @@ func debugScifactFull(
 	must(err)
 
 	// summary counts
-	fmt.Printf("Loaded %d total queries, %d queries with qrels\n\n",
+	logrus.Debugf("Loaded %d total queries, %d queries with qrels\n\n",
 		len(qs), len(rels))
 
 	// sample some qrels keys
-	fmt.Println("Sample qrels entries:")
+	logrus.Debugf("Sample qrels entries:")
 	i := 0
 	for qid, docs := range rels {
-		fmt.Printf("  • QID=%-5s → %3d relevant docs\n", qid, len(docs))
+		logrus.Debugf("  • QID=%-5s → %3d relevant docs\n", qid, len(docs))
 		i++
 		if i >= 5 {
 			break
 		}
 	}
-	fmt.Println()
+	logrus.Debugf("\n")
 
 	// evaluator setup
 	reader, err := bluge.OpenReader(bluge.DefaultConfig(idxPath))
@@ -60,8 +60,8 @@ func debugScifactFull(
 		printed++
 
 		// show the query and its ground-truth
-		fmt.Printf("=== Query #%d: ID=%s\n  \"%s\"\n", printed, q.ID, q.Text)
-		fmt.Printf("  Relevant docs: %v\n", mapKeys(docs))
+		logrus.Debugf("=== Query #%d: ID=%s\n  \"%s\"\n", printed, q.ID, q.Text)
+		logrus.Debugf("  Relevant docs: %v\n", mapKeys(docs))
 
 		// run the same BM25 search
 		boolean := bluge.NewBooleanQuery().
@@ -70,7 +70,7 @@ func debugScifactFull(
 		req := bluge.NewTopNSearch(topK, boolean)
 		it, _ := reader.Search(context.Background(), req)
 
-		fmt.Println("  Top retrieved:")
+		logrus.Debugf("  Top retrieved:")
 		for rank := 1; rank <= topK; rank++ {
 			match, err := it.Next()
 			if err != nil || match == nil {
@@ -86,10 +86,10 @@ func debugScifactFull(
 				return true
 			}))
 			isRel := docs[docID] > 0
-			fmt.Printf("    %2d. %-12s  score=%.4f  rel=%t\n",
+			logrus.Debugf("    %2d. %-12s  score=%.4f  rel=%t\n",
 				rank, docID, match.Score, isRel)
 		}
-		fmt.Println()
+		logrus.Debugf("\n")
 		bar.Add(1)
 	}
 }
