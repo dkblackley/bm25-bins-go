@@ -16,9 +16,10 @@ const (
 )
 
 type PianoPIRConfig struct {
-	DBEntryByteNum  uint64 // the number of bytes in a DB entry
-	DBEntrySize     uint64 // the number of uint64 in a DB entry
-	DBSize          uint64
+	DBEntryByteNum uint64 // the number of bytes in a DB entry
+	DBEntrySize    uint64 // the number of uint64 in a DB entry
+	DBSize         uint64
+	// A chunk is a single entry (I think)
 	ChunkSize       uint64
 	SetSize         uint64
 	ThreadNum       uint64
@@ -136,6 +137,8 @@ func NewPianoPIRClient(config *PianoPIRConfig) *PianoPIRClient {
 	//seed := int64(1678852332934430000)
 
 	maxQueryNum := uint64(math.Sqrt(float64(config.DBSize)) * math.Log(float64(config.DBSize)))
+	// Piano only guarentees correctness with some probability, this part is the number we need to get a fail prob
+	// of 2^(-41)
 	primaryHintNum := primaryNumParam(float64(maxQueryNum), float64(config.ChunkSize), config.FailureProbLog2+1) // fail prob 2^(-41)
 	primaryHintNum = (primaryHintNum + config.ThreadNum - 1) / config.ThreadNum * config.ThreadNum
 	maxQueryPerChunk := 3 * uint64(float64(maxQueryNum)/float64(config.SetSize))
@@ -160,7 +163,8 @@ func NewPianoPIRClient(config *PianoPIRConfig) *PianoPIRClient {
 
 		primaryHintNum:  primaryHintNum,
 		primaryShortTag: make([]uint64, primaryHintNum),
-		//TODO: What is this and why would we need the entry size?
+		// Piano has (for each entry in the hint table) a set of sqrt(n) indices and then the parity of all those bits
+		// I assume
 		primaryParity:       make([]uint64, primaryHintNum*config.DBEntrySize),
 		primaryProgramPoint: make([]uint64, primaryHintNum),
 
