@@ -98,8 +98,6 @@ func mrrAtK(idxPath, queriesPath, qrelsPath string, k int) float64 {
 
 func main() {
 
-	// index_stuff()
-
 	// 1. Set global log level (Trace, Debug, Info, Warn, Error, Fatal, Panic)
 	logrus.SetLevel(logrus.DebugLevel)
 
@@ -109,19 +107,18 @@ func main() {
 	})
 
 	root := "/home/yelnat/Nextcloud/10TB-STHDD/datasets"
-	debugScifactFull(
-		"index_scifact",
-		root+"/scifact/queries.jsonl",
-		root+"/scifact/qrels/test.tsv",
-		5,  // number of queries to sample
-		10, // Top-K to print
-	)
+	//debugScifactFull(
+	//	"index_scifact",
+	//	root+"/scifact/queries.jsonl",
+	//	root+"/scifact/qrels/test.tsv",
+	//	5,  // number of queries to sample
+	//	10, // Top-K to print
+	//)
 
-	k := flag.Int("k", 100, "MRR@k cutoff")
+	// index_stuff()
+
+	//k := flag.Int("k", 100, "MRR@k cutoff")
 	flag.Parse()
-
-	fmt.Println("---------- MRR evaluation ----------")
-	fmt.Printf("k = %d\n\n", *k)
 
 	datasets := []struct {
 		name     string
@@ -144,7 +141,18 @@ func main() {
 	}
 
 	for _, d := range datasets {
-		mrr := mrrAtK(d.indexDir, d.queries, d.qrels, *k)
-		fmt.Printf("%-10s : MRR@%d = %.5f\n", d.name, *k, mrr)
+		//mrr := mrrAtK(d.indexDir, d.queries, d.qrels, *k)
+		//fmt.Println("---------- MRR evaluation ----------")
+		//fmt.Printf("k = %d\n\n", *k)
+		//fmt.Printf("%-10s : MRR@%d = %.5f\n", d.name, *k, mrr)
+
+		// Grab the data in normalised size bytes:
+
+		rawDB := PirPreprocessData(d.indexDir)
+
+		logrus.Debug("About to run test_PIR")
+
+		logrus.Debug("Test")
 	}
+
 }

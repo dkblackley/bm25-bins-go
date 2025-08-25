@@ -4,14 +4,17 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
-	"github.com/blugelabs/bluge"
-	"github.com/schollz/progressbar/v3"
-	"github.com/sirupsen/logrus"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/blugelabs/bluge"
+	"github.com/schollz/progressbar/v3"
+	"github.com/sirupsen/logrus"
 )
 
 // ---------- small helpers ---------------------------------------------------
@@ -159,4 +162,102 @@ func loadQrels(path string) (qrels, error) {
 		rel[qid][docid] = v
 	}
 	return rel, sc.Err()
+}
+
+// ToFixedRows converts []string -> [][]byte.
+// Each row has: [ lenByte | content... | zero padding... ]
+// The row width is 1 + maxByteLen among inputs. Error if any string > 255 bytes.
+func ToFixedRows(strs []string) (rows [][]byte, rowSize int, err error) {
+	max := 0
+	for _, s := range strs {
+		n := len(s) // byte length (UTF-8)
+		if n > 255 {
+			return nil, 0, fmt.Errorf("string too long (%d bytes): %q", n, s)
+		}
+		if n > max {
+			max = n
+		}
+	}
+	rowSize = 1 + max // 1 length byte + payload
+
+	rows = make([][]byte, len(strs))
+	for i, s := range strs {
+		b := make([]byte, rowSize) // zero-initialized -> padding is 0x00
+		n := len(s)
+		b[0] = byte(n)
+		copy(b[1:], s) // copy n bytes; rest stay zero
+		rows[i] = b
+	}
+	return rows, rowSize, nil
+}
+
+// FromFixedRows converts [][]byte -> []string.
+// Expects each row to be the same length, with row[0] = byte length of payload.
+func FromFixedRows(rows [][]byte) ([]string, error) {
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	rowSize := len(rows[0])
+	for i, r := range rows {
+		if len(r) != rowSize {
+			return nil, fmt.Errorf("row %d has mismatched length: got %d, want %d", i, len(r), rowSize)
+		}
+	}
+
+	out := make([]string, len(rows))
+	for i, r := range rows {
+		n := int(r[0])
+		if n > rowSize-1 {
+			return nil, fmt.Errorf("row %d length byte %d exceeds payload size %d", i, n, rowSize-1)
+		}
+		out[i] = string(r[1 : 1+n]) // ignore zero padding
+	}
+	return out, nil
+}
+
+// ----------------- Takes in the dataset and returns it in a format that is acceptable for PIR -----------------------
+
+func PirPreprocessData(idxPath string) [][]byte {
+	// Open a reader on the index
+	reader, err := bluge.OpenReader(bluge.DefaultConfig(idxPath))
+	must(err)
+	defer reader.Close()
+
+	// Match ALL documents, and ask for ALL matches (unbounded iterator)
+	q := bluge.NewMatchAllQuery()
+	req := bluge.NewAllMatches(q)
+
+	it, err := reader.Search(context.Background(), req)
+	must(err)
+
+	IDArray := make([]string, 0)
+
+	for {
+		dm, err := it.Next()
+		must(err)
+		if dm == nil {
+			break // no more docs
+		}
+
+		// Pull the stored "_id" for this document
+		var docID string
+		err = dm.VisitStoredFields(func(field string, value []byte) bool {
+			if field == "_id" {
+				docID = string(value)
+				return false // stop visiting once we have the id
+			}
+			return true
+		})
+		must(err)
+
+		// Print it (or do whatever you need)
+		fmt.Println(docID)
+
+		IDArray = append(IDArray, docID)
+	}
+
+	bytesID, _, _ := ToFixedRows(IDArray)
+
+	return bytesID
+
 }

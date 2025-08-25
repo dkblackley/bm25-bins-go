@@ -1,6 +1,8 @@
 package pianopir
 
 import (
+	"github.com/dkblackley/bm25-bins-go"
+	"math"
 	"math/rand"
 	"testing"
 	"time"
@@ -21,6 +23,59 @@ func TestPIRBasic(t *testing.T) {
 			rawDB[i*DBEntrySize+j] = rng.Uint64()
 		}
 	}
+
+	PIR := NewPianoPIR(DBSize, DBEntrySize*8, rawDB, 40)
+
+	// print the config of the PIR
+	config := PIR.Config()
+	t.Logf("PIR config: %v", config)
+	t.Logf("hint num: %v", PIR.client.primaryHintNum)
+	t.Logf("max query num: %v", PIR.client.MaxQueryNum)
+
+	maxQueryNum := PIR.client.MaxQueryNum
+
+	PIR.Preprocessing()
+
+	// make 1000 random queries
+	for i := 0; i < int(maxQueryNum); i++ {
+		idx := rand.Uint64() % DBSize
+		query, err := PIR.Query(idx, true)
+		if err != nil {
+			t.Errorf("PIR.Query(%v) failed: %v", idx, err)
+		}
+
+		for j := uint64(0); j < DBEntrySize; j++ {
+			if query[j] != rawDB[idx*DBEntrySize+j] {
+				t.Errorf("query[%v] = %v; want %v", idx, query[j], rawDB[idx*DBEntrySize+j])
+			}
+		}
+
+		if i == 0 {
+			t.Logf("response = %v", query)
+		}
+
+		// just output a message to show the progress
+		//t.Logf("PIR.Query(%v) passed", idx)
+	}
+}
+
+func TestPIRBasicWithStrings(t *testing.T) {
+	// Arrange
+	// Set up any necessary data or arguments
+
+	rawDB := PirPreprocessData(d.indexDir)
+
+	DBSize := uint64(18750)
+	DBEntrySize := uint64(4)
+	//seed := time.Now().UnixNano()
+	//rng := rand.New(rand.NewSource(seed))
+
+	//rawDB := make([]uint64, DBEntrySize*DBSize)
+	//for i := uint64(0); i < DBSize; i++ {
+	//	for j := uint64(0); j < DBEntrySize; j++ {
+	//		rawDB[i*DBEntrySize+j] = rng.Uint64()
+	//	}
+	//}
 
 	PIR := NewPianoPIR(DBSize, DBEntrySize*8, rawDB, 40)
 
@@ -209,7 +264,7 @@ func TestBatchPIRPerf(t *testing.T) {
 	//DBSize := uint64(100000000)
 	//DBSize := uint64(300000)
 	DBEntrySize := uint64(112)
-	BatchSize := uint64(32)
+	BatchSize := uint64(float64(DBSize) / math.Sqrt(float64(DBSize)))
 
 	// a seed that's depending on the current time
 	seed := time.Now().UnixNano()
