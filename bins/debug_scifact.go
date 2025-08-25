@@ -1,5 +1,5 @@
 // debug_scifact_qrels.go
-package main
+package bins
 
 import (
 	"context"

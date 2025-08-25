@@ -1,7 +1,7 @@
 package pianopir
 
 import (
-	"github.com/dkblackley/bm25-bins-go"
+	"github.com/dkblackley/bm25-bins-go/bins"
 	"math"
 	"math/rand"
 	"testing"
@@ -63,7 +63,7 @@ func TestPIRBasicWithStrings(t *testing.T) {
 	// Arrange
 	// Set up any necessary data or arguments
 
-	rawDB := PirPreprocessData(d.indexDir)
+	rawDB := PirPre(d.indexDir)
 
 	DBSize := uint64(18750)
 	DBEntrySize := uint64(4)
