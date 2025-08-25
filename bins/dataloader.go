@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -164,60 +165,81 @@ func loadQrels(path string) (qrels, error) {
 	return rel, sc.Err()
 }
 
-// ToFixedRows converts []string -> [][]byte.
-// Each row has: [ lenByte | content... | zero padding... ]
-// The row width is 1 + maxByteLen among inputs. Error if any string > 255 bytes.
-func ToFixedRows(strs []string) (rows [][]byte, rowSize int, err error) {
-	max := 0
+// StringsToUint64Grid encodes []string -> [][]uint64. Strings are easy to make into bytes, but awkward to handle as
+// Arrays of uint64, as a result I pack multiple bytes into a uint64 instead of casting bytes into uint64s. I'm not
+// Sure if this is an easier or harder solution...
+// Each row: [ length | packed bytes ... | zero padding ... ]
+func StringsToUint64Grid(strs []string) ([][]uint64, int, error) {
+	maxBytes := 0
 	for _, s := range strs {
-		n := len(s) // byte length (UTF-8)
+		n := len(s)
 		if n > 255 {
 			return nil, 0, fmt.Errorf("string too long (%d bytes): %q", n, s)
 		}
-		if n > max {
-			max = n
+		if n > maxBytes {
+			maxBytes = n
 		}
 	}
-	rowSize = 1 + max // 1 length byte + payload
 
-	rows = make([][]byte, len(strs))
+	// How many uint64 blocks we need to store `maxBytes` bytes + 1 for length
+	blocksPerRow := 1 + (maxBytes+7)/8
+
+	grid := make([][]uint64, len(strs))
 	for i, s := range strs {
-		b := make([]byte, rowSize) // zero-initialized -> padding is 0x00
-		n := len(s)
-		b[0] = byte(n)
-		copy(b[1:], s) // copy n bytes; rest stay zero
-		rows[i] = b
+		row := make([]uint64, blocksPerRow)
+		row[0] = uint64(len(s))
+
+		// Fill payload bytes into a temporary buffer
+		tmp := make([]byte, (blocksPerRow-1)*8)
+		copy(tmp, []byte(s))
+
+		// Pack 8 bytes into each uint64 (big-endian)
+		for j := 0; j < blocksPerRow-1; j++ {
+			offset := j * 8
+			row[j+1] = binary.BigEndian.Uint64(tmp[offset : offset+8])
+		}
+		grid[i] = row
 	}
-	return rows, rowSize, nil
+
+	return grid, blocksPerRow, nil
 }
 
-// FromFixedRows converts [][]byte -> []string.
-// Expects each row to be the same length, with row[0] = byte length of payload.
-func FromFixedRows(rows [][]byte) ([]string, error) {
-	if len(rows) == 0 {
+// Uint64GridToStrings decodes [][]uint64 -> []string.
+func Uint64GridToStrings(grid [][]uint64) ([]string, error) {
+	if len(grid) == 0 {
 		return nil, nil
 	}
-	rowSize := len(rows[0])
-	for i, r := range rows {
-		if len(r) != rowSize {
-			return nil, fmt.Errorf("row %d has mismatched length: got %d, want %d", i, len(r), rowSize)
+	blocksPerRow := len(grid[0])
+	for i, r := range grid {
+		if len(r) != blocksPerRow {
+			return nil, fmt.Errorf("row %d has mismatched length: got %d, want %d", i, len(r), blocksPerRow)
 		}
 	}
 
-	out := make([]string, len(rows))
-	for i, r := range rows {
+	out := make([]string, len(grid))
+	// Make a buffer to start unpacking the bytes
+	buf := make([]byte, (blocksPerRow-1)*8)
+
+	for i, r := range grid {
 		n := int(r[0])
-		if n > rowSize-1 {
-			return nil, fmt.Errorf("row %d length byte %d exceeds payload size %d", i, n, rowSize-1)
+		if n > (blocksPerRow-1)*8 {
+			return nil, fmt.Errorf("row %d length %d exceeds capacity %d", i, n, (blocksPerRow-1)*8)
 		}
-		out[i] = string(r[1 : 1+n]) // ignore zero padding
+
+		// Unpack bytes from uint64 blocks
+		for j := 0; j < blocksPerRow-1; j++ {
+			binary.BigEndian.PutUint64(buf[j*8:(j+1)*8], r[j+1])
+		}
+
+		out[i] = string(buf[:n])
 	}
+
 	return out, nil
 }
 
 // ----------------- Takes in the dataset and returns it in a format that is acceptable for PIR -----------------------
 
-func PirPreprocessData(idxPath string) [][]byte {
+func PirPreprocessData(idxPath string) [][]uint64 {
 	// Open a reader on the index
 	reader, err := bluge.OpenReader(bluge.DefaultConfig(idxPath))
 	must(err)
@@ -256,7 +278,7 @@ func PirPreprocessData(idxPath string) [][]byte {
 		IDArray = append(IDArray, docID)
 	}
 
-	bytesID, _, _ := ToFixedRows(IDArray)
+	bytesID, _, _ := StringsToUint64Grid(IDArray)
 
 	return bytesID
 

@@ -1,11 +1,12 @@
 package pianopir
 
 import (
-	"github.com/dkblackley/bm25-bins-go/bins"
 	"math"
 	"math/rand"
 	"testing"
 	"time"
+
+	"github.com/dkblackley/bm25-bins-go/bins"
 )
 
 func TestPIRBasic(t *testing.T) {
@@ -63,19 +64,20 @@ func TestPIRBasicWithStrings(t *testing.T) {
 	// Arrange
 	// Set up any necessary data or arguments
 
-	rawDB := PirPre(d.indexDir)
+	nonFlatDB := bins.PirPreprocessData("index_scifact")
 
-	DBSize := uint64(18750)
-	DBEntrySize := uint64(4)
+	DBSize := uint64(len(nonFlatDB))
+	DBEntrySize := uint64(len(nonFlatDB[0]))
+	rawDB := make([]uint64, DBEntrySize*DBSize)
 	//seed := time.Now().UnixNano()
 	//rng := rand.New(rand.NewSource(seed))
 
 	//rawDB := make([]uint64, DBEntrySize*DBSize)
-	//for i := uint64(0); i < DBSize; i++ {
-	//	for j := uint64(0); j < DBEntrySize; j++ {
-	//		rawDB[i*DBEntrySize+j] = rng.Uint64()
-	//	}
-	//}
+	for i := uint64(0); i < DBSize; i++ {
+		for j := uint64(0); j < DBEntrySize; j++ {
+			rawDB[i*DBEntrySize+j] = nonFlatDB[i][j]
+		}
+	}
 
 	PIR := NewPianoPIR(DBSize, DBEntrySize*8, rawDB, 40)
 
