@@ -13,15 +13,19 @@ import (
 )
 
 // Used to convert beir data into formate for go bm25
+//
+// For scifact doc ID is just an integer, like: "40584205" or "10608397", sometimes it's a smaller number though, like:
+// "3845894" or probably even "1"
+// For TREC-COVID its strings like "1hvihwkz" or "3jolt83r". Bodies are just sentences of text.
 func index_stuff() {
 	// 1) SCIFACT
-	loadBeirJSONL("/home/yelnat/Documents/Nextcloud/10TB-STHDD/Sync-Folder-STHDD/datasets/scifact/corpus.jsonl", "index_scifact")
+	loadBeirJSONL("/home/yelnat/Nextcloud/10TB-STHDD/datasets/scifact/corpus.jsonl", "index_scifact")
 
 	// 2) TREC-COVID
-	loadBeirJSONL("/home/yelnat/Documents/Nextcloud/10TB-STHDD/Sync-Folder-STHDD/datasets/trec-covid/corpus.jsonl", "index_trec_covid")
+	loadBeirJSONL("/home/yelnat/Nextcloud/10TB-STHDD/datasets/trec-covid/corpus.jsonl", "index_trec_covid")
 
 	// 3) MSMARCO passage
-	// loadMSMARCO("/home/yelnat/Documents/Nextcloud/10TB-STHDD/Sync-Folder-STHDD/datasets/msmarco/collection.tsv", "index_msmarco")
+	// loadMSMARCO("/home/yelnat/Nextcloud/10TB-STHDD/datasets/msmarco/collection.tsv", "index_msmarco")
 
 	log.Println("✅  All indices built.")
 }
@@ -104,7 +108,7 @@ func main() {
 		FullTimestamp: true,
 	})
 
-	root := "/home/yelnat/Documents/Nextcloud/10TB-STHDD/Sync-Folder-STHDD/datasets"
+	root := "/home/yelnat/Nextcloud/10TB-STHDD/datasets"
 	debugScifactFull(
 		"index_scifact",
 		root+"/scifact/queries.jsonl",

@@ -63,7 +63,7 @@ func TestBatchPIRBasic(t *testing.T) {
 
 	DBSize := uint64(1000000)
 	DBEntrySize := uint64(16)
-	BatchSize := uint64(1000)
+	BatchSize := uint64(32)
 
 	// a seed that's depending on the current time
 	//seed := time.Now().UnixNano()
@@ -198,75 +198,6 @@ func TestBatchPIRBasic(t *testing.T) {
 				}
 			}
 		}
-	}
-}
-
-func StringsToBytesSlices(strs []string) [][]byte {
-	result := make([][]byte, len(strs))
-	for i, s := range strs {
-		result[i] = []byte(s)
-	}
-	return result
-}
-
-func testPIRFiles(t testing.T) {
-
-	// Just ignore 'DBEntrySize' and hope it all works out...
-
-	DBSize := uint64(5)
-	// DBEntrySize := uint64(4)
-	// seed := time.Now().UnixNano()
-	// rng := rand.New(rand.NewSource(seed))
-
-	fileDB := []string{"This is a test file", "this is another test", "testing again", "test4", "t"}
-	rawDB := StringsToBytesSlices(fileDB)
-
-	//rawDB := make([]uint64, DBEntrySize*DBSize)
-	//for i := uint64(0); i < DBSize; i++ {
-	//	for j := uint64(0); j < DBEntrySize; j++ {
-	//		rawDB[i*DBEntrySize+j] = rng.Uint64()
-	//	}
-	//}
-
-	//rawDB := make([]uint64, DBEntrySize*DBSize)
-	//for i := uint64(0); i < DBSize; i++ {
-	//	for j := uint64(0); j < DBEntrySize; j++ {
-	//		rawDB[i*DBEntrySize+j] = rng.Uint64()
-	//	}
-	//}
-
-	PIR := NewPianoPIR(DBSize, DBEntrySize*8, rawDB, 40)
-
-	// print the config of the PIR
-	config := PIR.Config()
-	t.Logf("PIR config: %v", config)
-	t.Logf("hint num: %v", PIR.client.primaryHintNum)
-	t.Logf("max query num: %v", PIR.client.MaxQueryNum)
-
-	maxQueryNum := PIR.client.MaxQueryNum
-
-	PIR.Preprocessing()
-
-	// make 1000 random queries
-	for i := 0; i < int(maxQueryNum); i++ {
-		idx := rand.Uint64() % DBSize
-		query, err := PIR.Query(idx, true)
-		if err != nil {
-			t.Errorf("PIR.Query(%v) failed: %v", idx, err)
-		}
-
-		for j := uint64(0); j < DBEntrySize; j++ {
-			if query[j] != rawDB[idx*DBEntrySize+j] {
-				t.Errorf("query[%v] = %v; want %v", idx, query[j], rawDB[idx*DBEntrySize+j])
-			}
-		}
-
-		if i == 0 {
-			t.Logf("response = %v", query)
-		}
-
-		// just output a message to show the progress
-		//t.Logf("PIR.Query(%v) passed", idx)
 	}
 }
 

@@ -16,10 +16,9 @@ const (
 )
 
 type PianoPIRConfig struct {
-	DBEntryByteNum uint64 // the number of bytes in a DB entry
-	DBEntrySize    uint64 // the number of uint64 in a DB entry
-	DBSize         uint64
-	// A chunk is a single entry (I think)
+	DBEntryByteNum  uint64 // the number of bytes in a DB entry
+	DBEntrySize     uint64 // the number of uint64 in a DB entry
+	DBSize          uint64
 	ChunkSize       uint64
 	SetSize         uint64
 	ThreadNum       uint64
@@ -137,8 +136,6 @@ func NewPianoPIRClient(config *PianoPIRConfig) *PianoPIRClient {
 	//seed := int64(1678852332934430000)
 
 	maxQueryNum := uint64(math.Sqrt(float64(config.DBSize)) * math.Log(float64(config.DBSize)))
-	// Piano only guarentees correctness with some probability, this part is the number we need to get a fail prob
-	// of 2^(-41)
 	primaryHintNum := primaryNumParam(float64(maxQueryNum), float64(config.ChunkSize), config.FailureProbLog2+1) // fail prob 2^(-41)
 	primaryHintNum = (primaryHintNum + config.ThreadNum - 1) / config.ThreadNum * config.ThreadNum
 	maxQueryPerChunk := 3 * uint64(float64(maxQueryNum)/float64(config.SetSize))
@@ -161,10 +158,8 @@ func NewPianoPIRClient(config *PianoPIRConfig) *PianoPIRClient {
 		FinishedQueryNum: 0,
 		QueryHistogram:   make([]uint64, config.SetSize),
 
-		primaryHintNum:  primaryHintNum,
-		primaryShortTag: make([]uint64, primaryHintNum),
-		// Piano has (for each entry in the hint table) a set of sqrt(n) indices and then the parity of all those bits
-		// I assume
+		primaryHintNum:      primaryHintNum,
+		primaryShortTag:     make([]uint64, primaryHintNum),
 		primaryParity:       make([]uint64, primaryHintNum*config.DBEntrySize),
 		primaryProgramPoint: make([]uint64, primaryHintNum),
 
@@ -479,43 +474,6 @@ type PianoPIR struct {
 	config *PianoPIRConfig
 	client *PianoPIRClient
 	server *PianoPIRServer
-}
-
-func NewPianoFilePIR(DBSize uint64, DBEntryByteNum uint64, rawDB []uint64, FailureProbLog2 uint64) *PianoPIR {
-
-	// TODO: assert that the rawDB is of the correct size
-	//if uint64(len(rawDB)) != DBSize*DBEntrySize {
-	//	log.Fatalf("Piano PIR len(rawDB) = %v; want %v", len(rawDB), DBSize*DBEntrySize)
-	//}
-
-	targetChunkSize := uint64(2 * math.Sqrt(float64(DBSize)))
-	ChunkSize := uint64(1)
-	for ChunkSize < targetChunkSize {
-		ChunkSize *= 2
-	}
-
-	SetSize := uint64(math.Ceil(float64(DBSize) / float64(ChunkSize)))
-	// round up to the next mulitple of 4
-	SetSize = (SetSize + 3) / 4 * 4
-
-	config := &PianoPIRConfig{
-		DBEntryByteNum:  DBEntryByteNum,
-		DBEntrySize:     0,
-		DBSize:          DBSize,
-		ChunkSize:       ChunkSize,
-		SetSize:         SetSize,
-		ThreadNum:       8,
-		FailureProbLog2: FailureProbLog2,
-	}
-
-	client := NewPianoPIRClient(config)
-	server := NewPianoPIRServer(config, rawDB)
-
-	return &PianoPIR{
-		config: config,
-		client: client,
-		server: server,
-	}
 }
 
 func NewPianoPIR(DBSize uint64, DBEntryByteNum uint64, rawDB []uint64, FailureProbLog2 uint64) *PianoPIR {
