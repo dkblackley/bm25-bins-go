@@ -4,6 +4,8 @@ go 1.24.5
 
 toolchain go1.24.6
 
+require github.com/dkblackley/bm25-bins-go/bins v0.0.0-20250825195514-be65430275b6
+
 require (
 	github.com/RoaringBitmap/roaring v0.9.4 // indirect
 	github.com/axiomhq/hyperloglog v0.0.0-20191112132149-a4c4c47bc57f // indirect

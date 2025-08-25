@@ -4,7 +4,7 @@ package main
 import (
 	"flag"
 
-	"github.com/dkblackley/bm25-bins-go/bins/bins"
+	"github.com/dkblackley/bm25-bins-go/bins"
 	"github.com/sirupsen/logrus"
 )
 

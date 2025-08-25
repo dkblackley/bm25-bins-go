@@ -64,7 +64,7 @@ func TestPIRBasicWithStrings(t *testing.T) {
 	// Arrange
 	// Set up any necessary data or arguments
 
-	nonFlatDB := bins.PirPreprocessData("index_scifact")
+	nonFlatDB := bins.PirPreprocessData("../index_scifact")
 
 	DBSize := uint64(len(nonFlatDB))
 	DBEntrySize := uint64(len(nonFlatDB[0]))

@@ -177,7 +177,7 @@ func StringsToUint64Grid(strs []string) ([][]uint64, int, error) {
 			return nil, 0, fmt.Errorf("string too long (%d bytes): %q", n, s)
 		}
 		if n > maxBytes {
-			maxBytes = n
+			maxBytes = ((n + 3) / 4) * 4
 		}
 	}
 
@@ -273,7 +273,7 @@ func PirPreprocessData(idxPath string) [][]uint64 {
 		must(err)
 
 		// Print it (or do whatever you need)
-		fmt.Println(docID)
+		//fmt.Println(docID)
 
 		IDArray = append(IDArray, docID)
 	}
