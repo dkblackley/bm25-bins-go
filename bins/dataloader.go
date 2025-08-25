@@ -177,12 +177,14 @@ func StringsToUint64Grid(strs []string) ([][]uint64, int, error) {
 			return nil, 0, fmt.Errorf("string too long (%d bytes): %q", n, s)
 		}
 		if n > maxBytes {
-			maxBytes = ((n + 3) / 4) * 4
+			maxBytes = n
 		}
 	}
 
-	// How many uint64 blocks we need to store `maxBytes` bytes + 1 for length
-	blocksPerRow := 1 + (maxBytes+7)/8
+	// How many uint64 blocks we need to store `maxBytes` bytes + 1 for length and made a multiple of 4 for
+	// pacmann specific implementation
+	//((n + 3) / 4) * 4
+	blocksPerRow := (((1 + (maxBytes+7)/8) + 3) / 4) * 4
 
 	grid := make([][]uint64, len(strs))
 	for i, s := range strs {
