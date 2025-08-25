@@ -1,4 +1,4 @@
-module github.com/dkblackley/bm25-bins-go/main
+module github.com/dkblackley/bm25-bins-go/bins
 
 go 1.24.5
 

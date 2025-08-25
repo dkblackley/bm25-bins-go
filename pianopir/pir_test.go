@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dkblackley/bm25-bins-go"
+	"github.com/dkblackley/bm25-bins-go/bins"
 )
 
 func TestPIRBasic(t *testing.T) {
