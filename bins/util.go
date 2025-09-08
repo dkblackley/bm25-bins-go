@@ -30,7 +30,7 @@ func index_stuff() {
 
 // ----------------- evaluation ----------------------------------------------
 
-func mrrAtK(idxPath, queriesPath, qrelsPath string, k int) float64 {
+func MrrAtK(idxPath, queriesPath, qrelsPath string, k int) float64 {
 
 	qs, err := loadQueries(queriesPath)
 	must(err)

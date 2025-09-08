@@ -29,11 +29,20 @@ func must(err error) {
 // ---------- simple BEIR JSONL loader ---------------------------------------
 
 type beirDoc struct {
-	ID       string `json:"_id"`
-	Title    string `json:"title"`
-	Text     string `json:"text"`
+	ID    string `json:"_id"`
+	Title string `json:"title"`
+	Text  string `json:"text"`
+	// These fields should always be empty, I just include it to avoid decoding errors
 	Abstract string `json:"abstract"` // used by SciFact
+	Metadata string `json:"metadata"`
+}
 
+type DatasetMetadata struct {
+	Name        string
+	IndexDir    string
+	OriginalDir string
+	Queries     string
+	Qrels       string
 }
 
 func loadBeirJSONL(path, indexDir string) {
@@ -68,7 +77,6 @@ func loadBeirJSONL(path, indexDir string) {
 				logrus.Tracef("⚠️  unknown JSON field in line: %v", err)
 				logrus.Tracef("Raw JSON line: %s", raw)
 			}
-
 		}
 
 		// now index as before
@@ -100,6 +108,48 @@ type query struct {
 }
 
 type qrels map[string]map[string]int
+
+func LoadCorpus(path string) ([]beirDoc, error) {
+	f, err := os.Open(path)
+	must(err)
+	defer f.Close()
+
+	var counter = 0
+
+	var ds []beirDoc
+	sc := bufio.NewScanner(f)
+
+	sc.Buffer(make([]byte, 1024), 10*1024*1024) // max 10 mib, should be fine (I hope)
+	for sc.Scan() {
+		raw := sc.Bytes()
+		dec := json.NewDecoder(bytes.NewReader(sc.Bytes()))
+		dec.DisallowUnknownFields()
+
+		var d beirDoc
+		if err := dec.Decode(&d); err != nil {
+			// if it's an unknown‐field error, log it and continue
+			if strings.HasPrefix(err.Error(), "json: unknown field") {
+				logrus.Errorf("⚠️  unknown JSON field in line: %v", err)
+				logrus.Errorf("Raw JSON line: %s", raw)
+			}
+		}
+
+		body := d.Text
+		if body == "" {
+			body = d.Abstract
+		}
+
+		document := beirDoc{
+			ID:    d.ID,
+			Title: d.Title,
+			Text:  body,
+		}
+
+		ds = append(ds, document)
+		counter++
+	}
+	return ds, sc.Err()
+}
 
 func loadQueries(path string) ([]query, error) {
 	f, err := os.Open(path)
