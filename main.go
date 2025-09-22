@@ -3,6 +3,7 @@ package main
 
 import (
 	"flag"
+	"strings"
 
 	"github.com/blugelabs/bluge"
 	"github.com/dkblackley/bm25-bins-go/bins"
@@ -65,12 +66,23 @@ func main() {
 		//defer reader.Close()
 
 		config := bins.Config{
-			K: 10,
+			K:       10,
+			D:       1,
+			MaxBins: 5000,
 		}
 
-		bins.UnigramRetriever(reader, d, config)
+		var DB = bins.MakeUnigramDB(reader, d, config)
 
-		_ = bins.PirPreprocessData(d.IndexDir)
+		//the encoder expects a more traditional DB, i.e. a single index to a single entry. As a 'hack' I'm going to
+		// change the index's of bins into a string seperated by "--!--" and just encode and decode on the client/server
+
+		new_DB := make([]string, len(DB))
+
+		for i, entry := range DB {
+			new_DB[i] = strings.Join(entry, "--!--")
+		}
+
+		bytesID, _, _ := StringsToUint64Grid(new_DB)
 
 		logrus.Debug("About to run test_PIR")
 

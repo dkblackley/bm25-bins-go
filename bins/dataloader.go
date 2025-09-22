@@ -1,4 +1,3 @@
-// main.go
 package bins
 
 import (
@@ -291,7 +290,10 @@ func Uint64GridToStrings(grid [][]uint64) ([]string, error) {
 
 // ----------------- Takes in the dataset and returns it in a format that is acceptable for PIR -----------------------
 
-func PirPreprocessData(idxPath string) [][]uint64 {
+func PirPreprocessAndLoadData(idxPath string) [][]uint64 {
+	// If you're not reading data from file and just have an array of strings, you can simply do:
+	// bytesID, _, _ := StringsToUint64Grid(DB)
+
 	// Open a reader on the index
 	reader, err := bluge.OpenReader(bluge.DefaultConfig(idxPath))
 	must(err)

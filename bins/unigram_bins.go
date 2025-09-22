@@ -9,9 +9,9 @@
 package bins
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"sort"
 
@@ -22,7 +22,9 @@ import (
 )
 
 type Config struct {
-	K int
+	K       uint
+	D       uint
+	MaxBins uint
 }
 
 func doBM25Search(queries []string, path_to_corpus string) {
@@ -30,7 +32,7 @@ func doBM25Search(queries []string, path_to_corpus string) {
 }
 
 // TODO: Replace bluge.reader with a generic implements
-func UnigramRetriever(reader *bluge.Reader, dataset DatasetMetadata, config Config) {
+func MakeUnigramDB(reader *bluge.Reader, dataset DatasetMetadata, config Config) [][]string {
 
 	tokeniser := en.NewAnalyzer()
 
@@ -72,6 +74,102 @@ func UnigramRetriever(reader *bluge.Reader, dataset DatasetMetadata, config Conf
 
 	bar.Finish()
 
+	// Very 'hacky' a mapping to a 'set' which is a mapping to structs. Is converted into a regular bin at the end.
+	setsBins := make(map[uint]map[string]struct{})
+
+	for word := range set {
+
+		// Perform BM25 search using each individual word as the query
+
+		matchTitle := bluge.NewMatchQuery(word).SetField("title")
+		matchBody := bluge.NewMatchQuery(word).SetField("body")
+		boolean := bluge.NewBooleanQuery().
+			AddShould(matchTitle).
+			AddShould(matchBody)
+
+		req := bluge.NewTopNSearch(int(config.K), boolean)
+		it, err := reader.Search(context.Background(), req)
+
+		must(err)
+
+		var storedIDs []string
+		// var counter := 0
+
+		for rank := uint(0); rank <= config.K; rank++ {
+			match, err := it.Next()
+			if err != nil {
+				break
+			}
+			if match == nil { // Should I do something if we have too few items??
+				break
+			}
+
+			// pull out the stored "_id" field instead of match.ID()
+			var docID string
+			err = match.VisitStoredFields(func(field string, value []byte) bool {
+				if field == "_id" {
+					docID = string(value)
+					storedIDs = append(storedIDs, docID)
+				}
+				return true // keep scanning other stored fields
+			})
+			must(err)
+
+			// Now to do the actual 'binning' for each unigram.
+
+			for d := uint(0); d <= config.D; d++ {
+
+				var bin_index = hashTokenChoice(word, d)
+
+				for _, storedID := range storedIDs {
+					add(setsBins, uint(bin_index)%config.MaxBins, storedID)
+				}
+
+			}
+
+		}
+
+	}
+
+	binsSlice := make([][]string, config.MaxBins)
+
+	for bin, set := range setsBins {
+		idx := int(bin)
+
+		// Pre-size capacity to avoid re-allocs while appending
+		binsSlice[idx] = make([]string, 0, len(set))
+		for w := range set {
+			binsSlice[idx] = append(binsSlice[idx], w)
+		}
+
+	}
+
+	return binsSlice
+
+}
+
+func add(sets map[uint]map[string]struct{}, bin uint, word string) {
+	if sets[bin] == nil {
+		sets[bin] = make(map[string]struct{})
+	}
+	sets[bin][word] = struct{}{}
+}
+
+func hashTokenChoice(tokens string, i uint) uint64 {
+	// Join all strings into a single byte sequence
+	// joined := strings.Join(tokens, "|")
+	data := []byte(tokens)
+
+	// Append integer i in big-endian form
+	var buf [4]byte
+	binary.BigEndian.PutUint32(buf[:], uint32(i))
+	data = append(data, buf[:]...)
+
+	// Hash with SHA-256
+	sum := sha256.Sum256(data)
+
+	// Take the first 8 bytes as uint64
+	return binary.BigEndian.Uint64(sum[0:8])
 }
 
 // --- If you already have this interface in another file, remove this copy ---
@@ -161,77 +259,4 @@ func (idx *NgramIndex) CandidatesForQueryTokens(qTokens []int) []int {
 	}
 	sort.Ints(out)
 	return out
-}
-
-// ----------------- Option B: unigram token -> D-choice bins -----------------
-
-// UnigramBins assigns each tokenID to D bins out of [0, MaxBins).
-// No retrieval or scores; purely hashing for quick plumbing tests.
-type UnigramBins struct {
-	D       int
-	MaxBins int
-	// tokenID -> []binIDs (length <= D; unique per token)
-	TokenBins map[int][]int
-}
-
-// BuildUnigramBins constructs D stable bins per token using SHA-256(token||i).
-func BuildUnigramBins(vocab map[string]int, D, maxBins int) (*UnigramBins, error) {
-	if D <= 0 {
-		D = 2
-	}
-	if maxBins <= 0 {
-		return nil, errors.New("maxBins must be > 0")
-	}
-
-	bins := &UnigramBins{
-		D:         D,
-		MaxBins:   maxBins,
-		TokenBins: make(map[int][]int, len(vocab)),
-	}
-
-	for _, tok := range vocab {
-		chosen := make([]int, 0, D)
-		seen := make(map[int]struct{}, D)
-		for i := 0; i < D; i++ {
-			h := hashTokenChoice(tok, i)
-			b := int(h % uint64(maxBins))
-			if _, ok := seen[b]; ok {
-				continue // extremely unlikely, but keep bins unique per token
-			}
-			seen[b] = struct{}{}
-			chosen = append(chosen, b)
-		}
-		bins.TokenBins[tok] = chosen
-	}
-	return bins, nil
-}
-
-// BinsForTokens returns the union of all bins hit by the provided tokens.
-func (ub *UnigramBins) BinsForTokens(tokens []int) []int {
-	if ub == nil || ub.TokenBins == nil {
-		return nil
-	}
-	seen := make(map[int]struct{}, ub.D*len(tokens))
-	for _, t := range tokens {
-		for _, b := range ub.TokenBins[t] {
-			seen[b] = struct{}{}
-		}
-	}
-	out := make([]int, 0, len(seen))
-	for b := range seen {
-		out = append(out, b)
-	}
-	sort.Ints(out)
-	return out
-}
-
-// hashTokenChoice mirrors the d-choice style used elsewhere: SHA-256 over
-// tokenID concatenated with the choice index, then first 8 bytes as uint64.
-func hashTokenChoice(tokenID int, i int) uint64 {
-	var buf [12]byte
-	binary.BigEndian.PutUint32(buf[0:4], uint32(tokenID))
-	binary.BigEndian.PutUint32(buf[4:8], uint32(i))
-	// 4 bytes left zeroed for spacing; not strictly necessary
-	sum := sha256.Sum256(buf[:])
-	return binary.BigEndian.Uint64(sum[0:8])
 }
