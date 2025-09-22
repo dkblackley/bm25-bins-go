@@ -82,7 +82,7 @@ func main() {
 			new_DB[i] = strings.Join(entry, "--!--")
 		}
 
-		bytesID, _, _ := StringsToUint64Grid(new_DB)
+		//bytesID, _, _ := bins.StringsToUint64Grid(new_DB)
 
 		logrus.Debug("About to run test_PIR")
 

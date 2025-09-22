@@ -13,7 +13,6 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
-	"sort"
 
 	"github.com/blugelabs/bluge"
 	"github.com/blugelabs/bluge/analysis/lang/en"
@@ -170,93 +169,4 @@ func hashTokenChoice(tokens string, i uint) uint64 {
 
 	// Take the first 8 bytes as uint64
 	return binary.BigEndian.Uint64(sum[0:8])
-}
-
-// --- If you already have this interface in another file, remove this copy ---
-// BM25 is the tiny adapter used by the n-gram/unigram builders.
-// Vocab returns word->tokenID. Retrieve runs a BM25 search for each query,
-// where each query is a slice of tokenIDs.
-type BM25 interface {
-	Vocab() map[string]int
-	Retrieve(termTokens [][]int, k int) (results [][]int, scores [][]float64, err error)
-}
-
-// ----------------- Option A: unigram token -> docs lookup -------------------
-
-// NgramIndex is the same shape used by the n-gram builder: token -> (doc->score)
-type NgramIndex struct {
-	Lookup map[int]map[int]float64 // tokenID → docID → score
-}
-
-// BuildUnigramIndex issues a single-term BM25 query for every vocab token and
-// records the top-K docs under that token. No fancy scoring/selection.
-func BuildUnigramIndex(bm BM25, topK int) (*NgramIndex, error) {
-	if topK <= 0 {
-		topK = 300
-	}
-	alphabet := bm.Vocab() // word -> tokenID
-	if len(alphabet) == 0 {
-		return &NgramIndex{Lookup: map[int]map[int]float64{}}, nil
-	}
-
-	// Prepare one single-term query per token
-	queries := make([][]int, 0, len(alphabet))
-	idList := make([]int, 0, len(alphabet))
-	for _, tok := range alphabet {
-		queries = append(queries, []int{tok})
-		idList = append(idList, tok)
-	}
-
-	results, scores, err := bm.Retrieve(queries, topK)
-	if err != nil {
-		return nil, err
-	}
-	lookup := make(map[int]map[int]float64, len(alphabet))
-	for qi := range results {
-		if qi >= len(scores) {
-			break
-		}
-		tok := idList[qi]
-		docs := results[qi]
-		scs := scores[qi]
-		if len(docs) != len(scs) {
-			// be tolerant and take the min length
-			n := len(docs)
-			if len(scs) < n {
-				n = len(scs)
-			}
-			docs = docs[:n]
-			scs = scs[:n]
-		}
-		m := lookup[tok]
-		if m == nil {
-			m = make(map[int]float64, len(docs))
-			lookup[tok] = m
-		}
-		for i, did := range docs {
-			m[did] = scs[i]
-		}
-	}
-	return &NgramIndex{Lookup: lookup}, nil
-}
-
-// CandidatesForQueryTokens unions the docs from the lookup for given tokens.
-func (idx *NgramIndex) CandidatesForQueryTokens(qTokens []int) []int {
-	if idx == nil || idx.Lookup == nil {
-		return nil
-	}
-	seen := make(map[int]struct{}, 1024)
-	for _, t := range qTokens {
-		if m := idx.Lookup[t]; m != nil {
-			for did := range m {
-				seen[did] = struct{}{}
-			}
-		}
-	}
-	out := make([]int, 0, len(seen))
-	for did := range seen {
-		out = append(out, did)
-	}
-	sort.Ints(out)
-	return out
 }

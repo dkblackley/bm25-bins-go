@@ -3,9 +3,12 @@ package pianopir
 import (
 	"math"
 	"math/rand"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/blugelabs/bluge"
 	"github.com/dkblackley/bm25-bins-go/bins"
 )
 
@@ -64,7 +67,7 @@ func TestPIRBasicWithStrings(t *testing.T) {
 	// Arrange
 	// Set up any necessary data or arguments
 
-	nonFlatDB := bins.PirPreprocessData("../index_scifact")
+	nonFlatDB := bins.PirPreprocessAndLoadData("../index_scifact")
 
 	DBSize := uint64(len(nonFlatDB))
 	DBEntrySize := uint64(len(nonFlatDB[0]))
@@ -259,25 +262,193 @@ func TestBatchPIRBasic(t *testing.T) {
 }
 
 func TestBatchPIRBasicWithStrings(t *testing.T) {
-	// Arrange
-	// Set up any necessary data or arguments
 
-	//DBSize := uint64(1000000)
-	//DBEntrySize := uint64(16)
-	BatchSize := uint64(32)
-	//
-	//// a seed that's depending on the current time
-	////seed := time.Now().UnixNano()
-	////rng := rand.New(rand.NewSource(seed))
-	//
-	//rawDB := make([]uint64, DBEntrySize*DBSize)
-	//for i := uint64(0); i < DBSize; i++ {
-	//	for j := uint64(0); j < DBEntrySize; j++ {
-	//		rawDB[i*DBEntrySize+j] = uint64(i) //rng.Uint64()
-	//	}
-	//}
+	stringDB := make([]string, 1000)
 
-	nonFlatDB := bins.PirPreprocessData("../index_scifact")
+	for i := 0; i < 1000; i++ {
+		stringDB[i] = strconv.Itoa(i)
+	}
+
+	// nonFlatDB := bins.PirPreprocessAndLoadData("../index_scifact")
+	nonFlatDB, _, _ := bins.StringsToUint64Grid(stringDB)
+
+	BatchSize := uint64(math.Sqrt(float64(len(nonFlatDB))))
+
+	DBSize := uint64(len(nonFlatDB))
+	DBEntrySize := uint64(len(nonFlatDB[0]))
+	rawDB := make([]uint64, DBEntrySize*DBSize)
+
+	PIR := NewSimpleBatchPianoPIR(DBSize, DBEntrySize*8, BatchSize, rawDB, 20)
+
+	// print the config of the PIR
+	config := PIR.Config()
+	t.Logf("Batch PIR config: %v", config)
+
+	PIR.Preprocessing()
+
+	// make a single batch query
+	// for each partition, make PartitionQueryNum queries
+	batchQuery := make([]uint64, 0, BatchSize)
+
+	for i := uint64(0); i < config.PartitionNum; i++ {
+		start := i * config.PartitionSize
+		end := min((i+1)*config.PartitionSize, DBSize)
+
+		for j := uint64(0); j < QueryPerPartition-1; j++ {
+			offset := rand.Uint64() % (end - start)
+			// append the query to the batch query
+			batchQuery = append(batchQuery, start+offset)
+		}
+	}
+
+	// now make a batch query
+	// they should be all correct
+
+	responses, err := PIR.Query(batchQuery)
+
+	if err != nil {
+		t.Errorf("PIR.Query(%v) failed: %v", batchQuery, err)
+	}
+
+	for i := 0; i < len(batchQuery); i++ {
+		idx := batchQuery[i]
+		query := responses[i]
+		for j := uint64(0); j < DBEntrySize; j++ {
+			if query[j] != rawDB[idx*DBEntrySize+j] {
+				t.Errorf("query[%v] = %v; want %v", idx, query[j], rawDB[idx*DBEntrySize+j])
+			}
+		}
+	}
+
+	// we make a batch query with each partition having 4 queries
+
+	batchQuery = make([]uint64, 4*config.PartitionNum)
+	for i := 0; i < int(config.PartitionNum); i++ {
+		start := i * int(config.PartitionSize)
+		end := min((i+1)*int(config.PartitionSize), int(DBSize))
+
+		for j := 0; j < 4; j++ {
+			offset := int(rand.Uint64() % uint64(end-start))
+			// append the query to the batch query
+			batchQuery[i*4+j] = uint64(start + offset)
+		}
+	}
+
+	responses, err = PIR.Query(batchQuery)
+
+	if err != nil {
+		t.Errorf("PIR.Query(%v) failed: %v", batchQuery, err)
+	}
+
+	for i := 0; i < len(batchQuery); i++ {
+		idx := batchQuery[i]
+		query := responses[i]
+		for j := uint64(0); j < DBEntrySize; j++ {
+			if query[j] != rawDB[idx*DBEntrySize+j] {
+				t.Errorf("query[%v] = %v; want %v", idx, query[j], rawDB[idx*DBEntrySize+j])
+			}
+		}
+	}
+
+	//t.Logf("Batch PIR.Query(%v) passed", batchQuery)
+
+	// now make another batch query
+	// it only has queries in the first partition
+	// so only the first PartitionQueryNum queries should be correct
+
+	querySet := make(map[uint64]bool)
+	batchQuery = make([]uint64, 0, BatchSize)
+	for i := uint64(0); i < BatchSize; i++ {
+		idx := rand.Uint64() % config.PartitionSize
+		if _, ok := querySet[idx]; ok {
+			// resample the index
+			i--
+			continue
+		}
+		querySet[idx] = true
+		batchQuery = append(batchQuery, idx)
+	}
+
+	// now make a batch query
+	// only the first PartitionQueryNum queries should be correct
+	// the rest should be all zeros
+
+	//fmt.Println("batchQuery: ", batchQuery)
+
+	responses, err = PIR.Query(batchQuery)
+
+	if err != nil {
+		t.Errorf("PIR.Query(%v) failed: %v", batchQuery, err)
+	}
+
+	for i := uint64(0); i < BatchSize; i++ {
+		idx := batchQuery[i]
+		query := responses[i]
+
+		if i < QueryPerPartition {
+			// check if the first PartitionQueryNum queries are correct
+			for j := uint64(0); j < DBEntrySize; j++ {
+				if query[j] != rawDB[idx*DBEntrySize+j] {
+					t.Errorf("query[%v] = %v; want %v", idx, query[j], rawDB[idx*DBEntrySize+j])
+				}
+			}
+		} else {
+			// otherwise check if they are all zeros
+			for j := uint64(0); j < DBEntrySize; j++ {
+				if query[j] != 0 {
+					t.Errorf("query[%v] = %v; want 0", idx, query[j])
+				}
+			}
+		}
+	}
+}
+
+func TestBatchPIRBasicWithUnigramBins(t *testing.T) {
+
+	root := "/home/yelnat/Documents/Nextcloud/10TB-STHDD/datasets"
+
+	datasets := []bins.DatasetMetadata{
+		{
+			"../SciFact",
+			"../index_scifact", // index folders created earlier
+			root + "/scifact/corpus.jsonl",
+			root + "/scifact/queries.jsonl",
+			root + "/scifact/qrels/test.tsv",
+		},
+		{
+			"TREC-COVID",
+			"index_trec_covid",
+			root + "/trec-covid/corpus.jsonl",
+			root + "/trec-covid/queries.jsonl",
+			root + "/trec-covid/qrels/test.tsv",
+		},
+	}
+
+	d := datasets[0]
+
+	reader, _ := bluge.OpenReader(bluge.DefaultConfig(d.IndexDir))
+
+	unigram_config := bins.Config{
+		K:       10,
+		D:       1,
+		MaxBins: 500,
+	}
+
+	var DB = bins.MakeUnigramDB(reader, d, unigram_config)
+
+	//the encoder expects a more traditional DB, i.e. a single index to a single entry. As a 'hack' I'm going to
+	// change the index's of bins into a string seperated by "--!--" and just encode and decode on the client/server
+
+	new_DB := make([]string, len(DB))
+
+	for i, entry := range DB {
+		new_DB[i] = strings.Join(entry, "--!--")
+	}
+
+	// nonFlatDB := bins.PirPreprocessAndLoadData("../index_scifact")
+	nonFlatDB, _, _ := bins.StringsToUint64Grid(new_DB)
+
+	BatchSize := uint64(math.Sqrt(float64(len(nonFlatDB))))
 
 	DBSize := uint64(len(nonFlatDB))
 	DBEntrySize := uint64(len(nonFlatDB[0]))
