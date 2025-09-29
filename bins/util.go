@@ -17,10 +17,10 @@ import (
 // For TREC-COVID its strings like "1hvihwkz" or "3jolt83r". Bodies are just sentences of text.
 func index_stuff() {
 	// 1) SCIFACT
-	loadBeirJSONL("/home/yelnat/Nextcloud/10TB-STHDD/datasets/scifact/corpus.jsonl", "index_scifact")
+	LoadBeirJSONL("/home/yelnat/Nextcloud/10TB-STHDD/datasets/scifact/corpus.jsonl", "index_scifact")
 
 	// 2) TREC-COVID
-	loadBeirJSONL("/home/yelnat/Nextcloud/10TB-STHDD/datasets/trec-covid/corpus.jsonl", "index_trec_covid")
+	LoadBeirJSONL("/home/yelnat/Nextcloud/10TB-STHDD/datasets/trec-covid/corpus.jsonl", "index_trec_covid")
 
 	// 3) MSMARCO passage
 	// loadMSMARCO("/home/yelnat/Nextcloud/10TB-STHDD/datasets/msmarco/collection.tsv", "index_msmarco")

@@ -14,6 +14,8 @@ import (
 
 func main() {
 
+	bins.LoadBeirJSONL("/home/yelnat/Documents/Nextcloud/10TB-STHDD/datasets/msmarco/corpus.jsonl", "/home/yelnat/Documents/Nextcloud/10TB-STHDD/Sync-Folder-STHDD/programmin/bm25-bins-go/index_marco")
+	return
 	// 1. Set global log level (Trace, Debug, Info, Warn, Error, Fatal, Panic)
 	logrus.SetLevel(logrus.InfoLevel)
 

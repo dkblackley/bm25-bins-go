@@ -44,7 +44,7 @@ type DatasetMetadata struct {
 	Qrels       string
 }
 
-func loadBeirJSONL(path, indexDir string) {
+func LoadBeirJSONL(path, indexDir string) {
 	f, err := os.Open(path)
 	must(err)
 	defer f.Close()
