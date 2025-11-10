@@ -15,11 +15,13 @@ import (
 	"github.com/blugelabs/bluge"
 	"github.com/schollz/progressbar/v3"
 	"github.com/sirupsen/logrus"
+
+	"github.com/kshedden/gonpy"
 )
 
 // ---------- small helpers ---------------------------------------------------
 
-func must(err error) {
+func Must(err error) {
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -46,14 +48,14 @@ type DatasetMetadata struct {
 
 func LoadBeirJSONL(path, indexDir string) {
 	f, err := os.Open(path)
-	must(err)
+	Must(err)
 	defer f.Close()
 
 	var counter = 0
 
 	cfg := bluge.DefaultConfig(indexDir)
 	w, err := bluge.OpenWriter(cfg)
-	must(err)
+	Must(err)
 	defer w.Close()
 
 	bar := progressbar.Default(-1, "index "+indexDir) // unknown total
@@ -89,7 +91,7 @@ func LoadBeirJSONL(path, indexDir string) {
 		doc.AddField(bluge.NewTextField("body", body))
 		doc.AddField(bluge.NewKeywordField("dataset", indexDir))
 
-		must(w.Insert(doc))
+		Must(w.Insert(doc))
 		counter++
 	}
 	if err := sc.Err(); err != nil {
@@ -100,7 +102,49 @@ func LoadBeirJSONL(path, indexDir string) {
 	logrus.Debugf("Total documents: %d", counter)
 }
 
-type query struct {
+// Taken from graphann package. I think dim should be 192 and n should be 8841823 (ms marco size)
+func LoadFloat32MatrixFromNpy(filename string, n int, dim int) ([][]float32, error) {
+	r, err := gonpy.NewFileReader(filename)
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
+
+	shape := r.Shape
+
+	// check the shape
+	if len(shape) != 2 || shape[0] < n || shape[1] != dim {
+		fmt.Printf("Invalid shape: %v\n", shape)
+		fmt.Printf("Expected shape: (%d, %d)\n", n, dim)
+		return nil, fmt.Errorf("invalid shape: %v", shape)
+	}
+
+	data, err := r.GetFloat32()
+
+	// data, err := r.GetFloat64()
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
+
+	bar := progressbar.Default(int64(n), "Loading BM25 vectors")
+
+	// we now convert the data to a 2D slice
+	ret := make([][]float32, n)
+	for i := 0; i < n; i++ {
+		ret[i] = make([]float32, dim)
+		for j := 0; j < dim; j++ {
+			ret[i][j] = float32(data[i*dim+j])
+		}
+		bar.Add64(int64(1))
+	}
+
+	bar.Finish()
+
+	return ret, nil
+}
+
+type Query struct {
 	ID   string `json:"_id"`
 	Text string `json:"text"`
 	// Metadata string `json:"metadata"`
@@ -110,7 +154,7 @@ type qrels map[string]map[string]int
 
 func LoadCorpus(path string) ([]beirDoc, error) {
 	f, err := os.Open(path)
-	must(err)
+	Must(err)
 	defer f.Close()
 
 	var counter = 0
@@ -150,7 +194,7 @@ func LoadCorpus(path string) ([]beirDoc, error) {
 	return ds, sc.Err()
 }
 
-func loadQueries(path string) ([]query, error) {
+func LoadQueries(path string) ([]Query, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -159,7 +203,7 @@ func loadQueries(path string) ([]query, error) {
 
 	var counter = 0
 
-	var qs []query
+	var qs []Query
 	sc := bufio.NewScanner(f)
 	// allow long queries
 	sc.Buffer(make([]byte, 1024), 1024*1024)
@@ -168,7 +212,7 @@ func loadQueries(path string) ([]query, error) {
 		dec := json.NewDecoder(bytes.NewReader(sc.Bytes()))
 		dec.DisallowUnknownFields()
 
-		var q query
+		var q Query
 		if err := dec.Decode(&q); err != nil {
 			// if it's an unknown‐field error, log it and continue
 			if strings.HasPrefix(err.Error(), "json: unknown field") {
@@ -296,7 +340,7 @@ func PirPreprocessAndLoadData(idxPath string) [][]uint64 {
 
 	// Open a reader on the index
 	reader, err := bluge.OpenReader(bluge.DefaultConfig(idxPath))
-	must(err)
+	Must(err)
 	defer reader.Close()
 
 	// Match ALL documents, and ask for ALL matches (unbounded iterator)
@@ -304,13 +348,13 @@ func PirPreprocessAndLoadData(idxPath string) [][]uint64 {
 	req := bluge.NewAllMatches(q)
 
 	it, err := reader.Search(context.Background(), req)
-	must(err)
+	Must(err)
 
 	IDArray := make([]string, 0)
 
 	for {
 		dm, err := it.Next()
-		must(err)
+		Must(err)
 		if dm == nil {
 			break // no more docs
 		}
@@ -324,7 +368,7 @@ func PirPreprocessAndLoadData(idxPath string) [][]uint64 {
 			}
 			return true
 		})
-		must(err)
+		Must(err)
 
 		//fmt.Println(docID)
 

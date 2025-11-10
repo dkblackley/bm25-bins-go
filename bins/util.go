@@ -32,13 +32,13 @@ func index_stuff() {
 
 func MrrAtK(idxPath, queriesPath, qrelsPath string, k int) float64 {
 
-	qs, err := loadQueries(queriesPath)
-	must(err)
+	qs, err := LoadQueries(queriesPath)
+	Must(err)
 	rels, err := loadQrels(qrelsPath)
-	must(err)
+	Must(err)
 
 	reader, err := bluge.OpenReader(bluge.DefaultConfig(idxPath))
-	must(err)
+	Must(err)
 	defer reader.Close()
 
 	bar := progressbar.Default(int64(len(qs)), fmt.Sprintf("eval %s", idxPath))
@@ -46,7 +46,7 @@ func MrrAtK(idxPath, queriesPath, qrelsPath string, k int) float64 {
 	var sumRR float64
 	for _, q := range qs {
 
-		// simple: match query text against both title and body
+		// simple: match Query text against both title and body
 		matchTitle := bluge.NewMatchQuery(q.Text).SetField("title")
 		matchBody := bluge.NewMatchQuery(q.Text).SetField("body")
 		boolean := bluge.NewBooleanQuery().
@@ -56,7 +56,7 @@ func MrrAtK(idxPath, queriesPath, qrelsPath string, k int) float64 {
 		req := bluge.NewTopNSearch(k, boolean)
 		it, err := reader.Search(context.Background(), req)
 
-		must(err)
+		Must(err)
 
 		rr := 0.0
 		for rank := 1; rank <= k; rank++ {
@@ -77,7 +77,7 @@ func MrrAtK(idxPath, queriesPath, qrelsPath string, k int) float64 {
 				}
 				return true // keep scanning other stored fields
 			})
-			must(err)
+			Must(err)
 
 			if rels[q.ID][docID] > 0 {
 				rr = 1.0 / float64(rank)

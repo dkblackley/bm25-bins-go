@@ -4,6 +4,7 @@ go 1.24.5
 
 require (
 	github.com/blugelabs/bluge v0.2.2
+	github.com/kshedden/gonpy v0.0.0-20210519231815-fa3c8dd8e59b
 	github.com/schollz/progressbar/v3 v3.18.0
 	github.com/sirupsen/logrus v1.9.3
 )

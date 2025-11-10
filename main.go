@@ -2,20 +2,64 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/csv"
 	"flag"
-	"strings"
+	"fmt"
+	"math"
+	"os"
+	"regexp"
+	"runtime"
+	"strconv"
+	"time"
 
-	"github.com/blugelabs/bluge"
+	"github.com/blugelabs/bluge/analysis"
+	"github.com/blugelabs/bluge/analysis/char"
+	"github.com/blugelabs/bluge/analysis/lang/en"
+	"github.com/blugelabs/bluge/analysis/token"
+	"github.com/blugelabs/bluge/analysis/tokenizer"
 	"github.com/dkblackley/bm25-bins-go/bins"
+	"github.com/dkblackley/bm25-bins-go/pianopir"
+	"github.com/schollz/progressbar/v3"
 	"github.com/sirupsen/logrus"
 )
+
+const MAX_UINT32 = ^uint32(0)
+
+// WriteCSV writes a [][]string as CSV.
+func WriteCSV(path string, data [][]string) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	w := csv.NewWriter(f)
+	// Optional: TSV instead of CSV
+	// w.Comma = '\t'
+	w.WriteAll(data)
+	return w.Error()
+}
+
+// ReadCSV loads a [][]string from CSV.
+func ReadCSV(path string) ([][]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	r := csv.NewReader(f)
+	// Allow ragged rows if you don't know column count ahead of time:
+	r.FieldsPerRecord = -1
+	return r.ReadAll()
+}
 
 // --------------------------- main -------------------------------------------
 
 func main() {
 
-	bins.LoadBeirJSONL("/home/yelnat/Documents/Nextcloud/10TB-STHDD/datasets/msmarco/corpus.jsonl", "/home/yelnat/Documents/Nextcloud/10TB-STHDD/Sync-Folder-STHDD/programmin/bm25-bins-go/index_marco")
-	return
 	// 1. Set global log level (Trace, Debug, Info, Warn, Error, Fatal, Panic)
 	logrus.SetLevel(logrus.InfoLevel)
 
@@ -24,8 +68,8 @@ func main() {
 		FullTimestamp: true,
 	})
 
-	root := "/home/yelnat/Documents/Nextcloud/10TB-STHDD/datasets"
-	// root := "/home/yelnat/Nextcloud/10TB-STHDD/datasets"
+	// root := "/home/yelnat/Documents/Nextcloud/10TB-STHDD/datasets"
+	root := "/home/yelnat/Nextcloud/10TB-STHDD/datasets"
 	//debugScifactFull(
 	//	"index_scifact",
 	//	root+"/scifact/queries.jsonl",
@@ -40,19 +84,26 @@ func main() {
 	flag.Parse()
 
 	datasets := []bins.DatasetMetadata{
+		//{
+		//	"SciFact",
+		//	"index_scifact", // index folders created earlier
+		//	root + "/scifact/corpus.jsonl",
+		//	root + "/scifact/queries.jsonl",
+		//	root + "/scifact/qrels/test.tsv",
+		//},
+		//{
+		//	"TREC-COVID",
+		//	"index_trec_covid",
+		//	root + "/trec-covid/corpus.jsonl",
+		//	root + "/trec-covid/queries.jsonl",
+		//	root + "/trec-covid/qrels/test.tsv",
+		//},
 		{
-			"SciFact",
-			"index_scifact", // index folders created earlier
-			root + "/scifact/corpus.jsonl",
-			root + "/scifact/queries.jsonl",
-			root + "/scifact/qrels/test.tsv",
-		},
-		{
-			"TREC-COVID",
-			"index_trec_covid",
-			root + "/trec-covid/corpus.jsonl",
-			root + "/trec-covid/queries.jsonl",
-			root + "/trec-covid/qrels/test.tsv",
+			"Marco",
+			"index_marco",
+			root + "/msmarco/corpus.jsonl",
+			root + "/msmarco/queries.jsonl",
+			root + "/msmarco/qrels/test.tsv",
 		},
 	}
 
@@ -64,31 +115,275 @@ func main() {
 
 		// Grab the data in normalised size bytes:
 
-		reader, _ := bluge.OpenReader(bluge.DefaultConfig(d.IndexDir))
+		//reader, _ := bluge.OpenReader(bluge.DefaultConfig(d.IndexDir))
 		//defer reader.Close()
+		//
+		//config := bins.Config{
+		//	K:         100,
+		//	D:         1,
+		//	MaxBins:   50000,
+		//	Threshold: 3,
+		//}
+		//var DB = bins.MakeUnigramDB(reader, d, config)
+		//err := WriteCSV("marco.csv", DB)
+		//bins.Must(err)
 
-		config := bins.Config{
-			K:       10,
-			D:       1,
-			MaxBins: 5000,
-		}
+		DB, err := ReadCSV("marco.csv")
+		bins.Must(err)
 
-		var DB = bins.MakeUnigramDB(reader, d, config)
+		//
+		//if len(DB) != len(DB_2) {
+		//	logrus.Errorf("Something wrong %d, %d", len(DB), len(DB_2))
+		//}
+		//for i := range DB {
+		//	if len(DB[i]) != len(DB_2[i]) {
+		//		logrus.Errorf("Something wrong in sub-length %d, %d", len(DB[i]), len(DB_2[i]))
+		//	}
+		//	for j := range DB[i] {
+		//		if DB[i][j] != DB_2[i][j] {
+		//			logrus.Errorf("Something in row %s, %s", DB[i][j], DB_2[i][j])
+		//		}
+		//	}
+		//}
+		//logrus.Info("All good")
 
 		//the encoder expects a more traditional DB, i.e. a single index to a single entry. As a 'hack' I'm going to
 		// change the index's of bins into a string seperated by "--!--" and just encode and decode on the client/server
 
-		new_DB := make([]string, len(DB))
+		dimension := 192
+		ms_marco_size := 8841823
+		bm_25_vectors, err := bins.LoadFloat32MatrixFromNpy(root+"/Son/my_vectors_192.npy", ms_marco_size, dimension)
 
-		for i, entry := range DB {
-			new_DB[i] = strings.Join(entry, "--!--")
+		// TODO: Something with .npy.id file
+
+		//TODO Remove this debug sampling
+		//const sampleRows = 300
+		//const sampleCols = 20
+		//
+		//if len(DB) > sampleRows {
+		//	DB = DB[:sampleRows]
+		//}
+
+		bins.Must(err)
+		pad := make([]float32, dimension) // zeros; or fill with 1s once if you need
+		max_row_size := 0
+		redundancy := 0
+		for _, e := range DB {
+			if len(e) > max_row_size {
+				max_row_size = len(e)
+			}
 		}
+		//if max_row_size > sampleCols {
+		//	max_row_size = sampleCols
+		//}
 
-		//bytesID, _, _ := bins.StringsToUint64Grid(new_DB)
+		new_DB := make([][][]float32, 0, len(DB))
+		for _, entry := range DB {
+			row := make([][]float32, 0, max_row_size)
+			// cap columns
+			upto := len(entry)
+			if upto > max_row_size {
+				upto = max_row_size
+			}
+			for j := 0; j < upto; j++ {
+				id64, err := strconv.ParseUint(entry[j], 10, 32)
+				bins.Must(err)
+				row = append(row, bm_25_vectors[id64]) // shares the row slice; no copy
+			}
+			for len(row) < max_row_size {
+				redundancy++
+				row = append(row, pad) // shared, no per-cell alloc
+			}
+			new_DB = append(new_DB, row)
+		}
+		//bm_25_vectors = nil
+		DB = nil
+		//TODO remove this
+		// new_DB = new_DB[:100]
 
-		logrus.Debug("About to run test_PIR")
+		runtime.GC()
 
-		logrus.Debug("Test")
+		b := uint64(len(new_DB)) * uint64(max_row_size) * uint64(dimension) * 4
+		logrus.Infof("New DB size: %.2f MiB (%d bytes)", float64(b)/(1<<20), b)
+
+		logrus.Infof("Marco vectors: %.2f GiB", float64(ms_marco_size*dimension*4)/(1<<30))
+		logrus.Infof("Max row size: %d", max_row_size)
+		logrus.Infof("Padded files %d", redundancy)
+
+		// PIR setup
+		start := time.Now()
+		bin_PIR := Preprocess(new_DB, dimension, max_row_size)
+		end := time.Now()
+
+		queries, er := bins.LoadQueries(d.Queries)
+		bins.Must(er)
+
+		answers := make([][][]uint64, len(queries))
+		maintainenceTime := time.Duration(0)
+
+		// windowSize := queryEngine.PIR.SupportBatchNum / (uint64(*stepN) * uint64(*parallelN)) // For logging
+		start = time.Now()
+		for i := 0; i < len(queries); i++ {
+
+			answers[i] = BinSearch(queries[i], 1, bin_PIR)
+
+			if bin_PIR.PIR.FinishedBatchNum >= bin_PIR.PIR.SupportBatchNum {
+				// in this case we need to re-run the preprocessing
+				start := time.Now()
+				bin_PIR.PIR.Preprocessing()
+				end := time.Now()
+				maintainenceTime += end.Sub(start)
+			}
+		}
+		end = time.Now()
+
+		searchTime := end.Sub(start) - maintainenceTime
+		avgTime := searchTime.Seconds() / float64(len(queries))
+
+		logrus.Infof("Search time: %d", avgTime)
+
 	}
 
+}
+
+// ---- PIR stuff
+
+type PIRBins struct {
+	N       int // Items in DB
+	Dim     int // dimension of vectors
+	RowSize int // number of vectors in a row
+	//bins    [][]float32
+	//vectors [][]float32
+
+	DBEntrySize uint64 // per entry bytes
+	DBTotalSize uint64 // in bytes
+	rawDB       []uint64
+	PIR         *pianopir.SimpleBatchPianoPIR
+}
+
+func Preprocess(vectors_in_bins [][][]float32, Dim int, maxRowSize int) PIRBins {
+	DBEntrySize := Dim * 4 * maxRowSize // bytes per DB entry (maxRowSize vectors × Dim float32s)
+	DBSize := len(vectors_in_bins)
+	wordsPerEntry := DBEntrySize / 8
+
+	// FIX: allocate enough uint64s for all entries
+	rawDB := make([]uint64, DBSize*wordsPerEntry)
+
+	bar := progressbar.Default(int64(len(vectors_in_bins)), fmt.Sprintf("Preprocessing"))
+
+	for i := 0; i < len(vectors_in_bins); i++ {
+		// 1) Build byte-slices for up to maxRowSize vectors (pad zeros if fewer)
+		vectorBytesArray := make([][]byte, 0, maxRowSize)
+		for j := 0; j < len(vectors_in_bins[i]) && len(vectorBytesArray) < maxRowSize; j++ {
+			vector := vectors_in_bins[i][j]
+			vectorBytes := make([]byte, Dim*4)
+			for k := 0; k < Dim && k < len(vector); k++ {
+				binary.LittleEndian.PutUint32(vectorBytes[k*4:], math.Float32bits(vector[k]))
+			}
+			vectorBytesArray = append(vectorBytesArray, vectorBytes)
+		}
+		for len(vectorBytesArray) < maxRowSize {
+			vectorBytesArray = append(vectorBytesArray, make([]byte, Dim*4)) // zero-pad rows
+		}
+
+		// 2) Concatenate the row into one byte slice of size DBEntrySize
+		entryBytes := make([]byte, 0, DBEntrySize)
+		for _, vb := range vectorBytesArray {
+			entryBytes = append(entryBytes, vb...)
+		}
+
+		// 3) Convert bytes → uint64s (exact 8-byte windows)
+		entry := make([]uint64, wordsPerEntry)
+		for k := 0; k < wordsPerEntry; k++ {
+			off := k * 8
+			entry[k] = binary.LittleEndian.Uint64(entryBytes[off : off+8])
+		}
+
+		// 4) Copy into rawDB at the right offset
+		copy(rawDB[i*wordsPerEntry:], entry)
+
+		bar.Add(1)
+	}
+
+	bar.Finish()
+	// Set up the PIR
+
+	pir := pianopir.NewSimpleBatchPianoPIR(uint64(len(vectors_in_bins)), uint64(DBEntrySize), 32, rawDB, 8)
+
+	logrus.Info("PIR Ready for preprocessing")
+
+	pir.Preprocessing()
+
+	ret := PIRBins{
+		N:       len(vectors_in_bins),
+		Dim:     int(Dim),
+		RowSize: int(maxRowSize),
+		rawDB:   rawDB,
+
+		PIR:         pir,
+		DBTotalSize: uint64(len(vectors_in_bins) * DBEntrySize),
+		DBEntrySize: uint64(DBEntrySize),
+	}
+
+	logrus.Infof("%d, %d, %d, %d", ret.N, ret.DBTotalSize, ret.DBEntrySize, ret.RowSize)
+
+	return ret
+}
+
+func strictEnglishAnalyzer() *analysis.Analyzer {
+	return &analysis.Analyzer{
+		// Optional: normalize punctuation BEFORE tokenizing (e.g., turn periods/commas into spaces)
+		CharFilters: []analysis.CharFilter{
+			char.NewRegexpCharFilter(regexp.MustCompile(`[.,]+`), []byte(" ")),
+		},
+		// Critical: letters-only tokenizer (drops digits/punct)
+		Tokenizer: tokenizer.NewLetterTokenizer(),
+		TokenFilters: []analysis.TokenFilter{
+			en.NewPossessiveFilter(),
+			token.NewLowerCaseFilter(),
+			token.NewStopTokensFilter(en.StopWords()),
+			en.StemmerFilter(),
+			token.NewLengthFilter(2, 40), // tune min/max token length
+		},
+	}
+}
+
+func hashTokenChoice(tokens string, i uint) uint64 {
+	// Join all strings into a single byte sequence
+	// joined := strings.Join(tokens, "|")
+	data := []byte(tokens)
+
+	// Append integer i in big-endian form
+	var buf [4]byte
+	binary.BigEndian.PutUint32(buf[:], uint32(i))
+	data = append(data, buf[:]...)
+
+	// Hash with SHA-256
+	sum := sha256.Sum256(data)
+
+	// Take the first 8 bytes as uint64
+	return binary.BigEndian.Uint64(sum[0:8])
+}
+
+func make_indices(query_text string, choices uint, modulus uint) []uint64 {
+	tokeniser := strictEnglishAnalyzer()
+	tokens := tokeniser.Analyze([]byte(query_text))
+
+	indices := make([]uint64, len(tokens))
+	for i, t := range tokens {
+		indices[i] = hashTokenChoice(fmt.Sprintf("%s", t.Term), choices) % uint64(modulus)
+	}
+
+	return indices
+}
+
+func BinSearch(queries bins.Query, d int, binsDB PIRBins) [][]uint64 {
+
+	// convert the query text to bin indexs
+
+	indices := make_indices(queries.Text, uint(d), uint(binsDB.N))
+	responses, err := binsDB.PIR.Query(indices)
+	bins.Must(err)
+
+	return responses
 }

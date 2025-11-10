@@ -13,35 +13,64 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+	"regexp"
 
 	"github.com/blugelabs/bluge"
+	"github.com/blugelabs/bluge/analysis"
+	"github.com/blugelabs/bluge/analysis/char"
 	"github.com/blugelabs/bluge/analysis/lang/en"
+	"github.com/blugelabs/bluge/analysis/token"
+	"github.com/blugelabs/bluge/analysis/tokenizer"
 	"github.com/schollz/progressbar/v3"
 	"github.com/sirupsen/logrus"
 )
 
 type Config struct {
-	K       uint
-	D       uint
-	MaxBins uint
+	K         uint
+	D         uint
+	MaxBins   uint
+	Filenames bool
+	Threshold uint
 }
 
 func doBM25Search(queries []string, path_to_corpus string) {
 
 }
 
+func strictEnglishAnalyzer() *analysis.Analyzer {
+	return &analysis.Analyzer{
+		// Optional: normalize punctuation BEFORE tokenizing (e.g., turn periods/commas into spaces)
+		CharFilters: []analysis.CharFilter{
+			char.NewRegexpCharFilter(regexp.MustCompile(`[.,]+`), []byte(" ")),
+		},
+		// Critical: letters-only tokenizer (drops digits/punct)
+		Tokenizer: tokenizer.NewLetterTokenizer(),
+		TokenFilters: []analysis.TokenFilter{
+			en.NewPossessiveFilter(),
+			token.NewLowerCaseFilter(),
+			token.NewStopTokensFilter(en.StopWords()),
+			en.StemmerFilter(),
+			token.NewLengthFilter(2, 40), // tune min/max token length
+		},
+	}
+}
+
 // TODO: Replace bluge.reader with a generic implements
 func MakeUnigramDB(reader *bluge.Reader, dataset DatasetMetadata, config Config) [][]string {
 
-	tokeniser := en.NewAnalyzer()
+	//tokeniser := en.NewAnalyzer()
+
+	tokeniser := strictEnglishAnalyzer()
 
 	//logrus.Info("Making Unigram Database")
-	//queries, er := loadQueries(dataset.Queries)
-	//must(er)
+	//queries, er := LoadQueries(dataset.Queries)
+	//Must(er)
 	//qrels, er := loadQrels(dataset.Qrels)
-	// must(er)
+	// Must(er)
 	docs, er := LoadCorpus(dataset.OriginalDir)
-	must(er)
+	Must(er)
+
+	total_items_in_set := 0
 
 	bar := progressbar.Default(int64(len(docs)), fmt.Sprintf("Scanning Vocab for %s", dataset.Name))
 
@@ -52,7 +81,7 @@ func MakeUnigramDB(reader *bluge.Reader, dataset DatasetMetadata, config Config)
 
 		title := doc.Title
 		text := doc.Text
-		if text != "" {
+		if text == "" {
 			text = doc.Abstract
 		}
 
@@ -64,7 +93,11 @@ func MakeUnigramDB(reader *bluge.Reader, dataset DatasetMetadata, config Config)
 			logrus.Tracef("%q term=%q start=%d end=%d posIncr=%d\n",
 				result[t.Start:t.End], t.Term, t.Start, t.End, t.PositionIncr)
 			word := fmt.Sprintf("%s", t.Term)
+			_, ok := set[word]
 
+			if !ok {
+				total_items_in_set++
+			}
 			set[word] = struct{}{}
 		}
 
@@ -76,9 +109,12 @@ func MakeUnigramDB(reader *bluge.Reader, dataset DatasetMetadata, config Config)
 	// Very 'hacky' a mapping to a 'set' which is a mapping to structs. Is converted into a regular bin at the end.
 	setsBins := make(map[uint]map[string]struct{})
 
+	bar = progressbar.Default(int64(len(docs)), fmt.Sprintf("Putting items into bins %s", dataset.Name))
+
 	for word := range set {
 
-		// Perform BM25 search using each individual word as the query
+		bar.Add(1)
+		// Perform BM25 search using each individual word as the Query
 
 		matchTitle := bluge.NewMatchQuery(word).SetField("title")
 		matchBody := bluge.NewMatchQuery(word).SetField("body")
@@ -89,12 +125,9 @@ func MakeUnigramDB(reader *bluge.Reader, dataset DatasetMetadata, config Config)
 		req := bluge.NewTopNSearch(int(config.K), boolean)
 		it, err := reader.Search(context.Background(), req)
 
-		must(err)
+		var doc_ids []string
 
-		var storedIDs []string
-		// var counter := 0
-
-		for rank := uint(0); rank <= config.K; rank++ {
+		for {
 			match, err := it.Next()
 			if err != nil {
 				break
@@ -108,20 +141,44 @@ func MakeUnigramDB(reader *bluge.Reader, dataset DatasetMetadata, config Config)
 			err = match.VisitStoredFields(func(field string, value []byte) bool {
 				if field == "_id" {
 					docID = string(value)
-					storedIDs = append(storedIDs, docID)
+					// storedIDs = append(storedIDs, docID)
 				}
 				return true // keep scanning other stored fields
 			})
-			must(err)
+			Must(err)
+
+			doc_ids = append(doc_ids, docID)
+		}
+
+		if len(doc_ids) <= int(config.Threshold) {
+			continue
+		}
+
+		Must(err)
+
+		var storedIDs []string
+		// var counter := 0
+
+		for rank := uint(0); rank <= config.K; rank++ {
+
+			if int(rank) >= len(doc_ids) { // Ran out of hits
+				break
+			}
+			storedIDs = append(storedIDs, doc_ids[rank])
 
 			// Now to do the actual 'binning' for each unigram.
-
 			for d := uint(0); d <= config.D; d++ {
 
 				var bin_index = hashTokenChoice(word, d)
 
-				for _, storedID := range storedIDs {
-					add(setsBins, uint(bin_index)%config.MaxBins, storedID)
+				if config.Filenames {
+					for _, docID := range storedIDs {
+						add(setsBins, uint(bin_index)%config.MaxBins, docID)
+					}
+				} else {
+					for _, storedID := range storedIDs {
+						add(setsBins, uint(bin_index)%config.MaxBins, storedID)
+					}
 				}
 
 			}
@@ -130,6 +187,7 @@ func MakeUnigramDB(reader *bluge.Reader, dataset DatasetMetadata, config Config)
 
 	}
 
+	bar.Finish()
 	binsSlice := make([][]string, config.MaxBins)
 
 	for bin, set := range setsBins {

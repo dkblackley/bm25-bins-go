@@ -12,7 +12,7 @@ import (
 //   - total queries vs. total qrels entries
 //   - a sample of qrels keys and their doc-counts
 //   - for the first N queries that *do* have qrels:
-//     – the query text
+//     – the Query text
 //     – the list of relevant docs
 //     – the top-K retrieved docs with scores and rel-flags
 func debugScifactFull(
@@ -20,10 +20,10 @@ func debugScifactFull(
 	sampleQ, topK int,
 ) {
 	// load everything
-	qs, err := loadQueries(queriesPath)
-	must(err)
+	qs, err := LoadQueries(queriesPath)
+	Must(err)
 	rels, err := loadQrels(qrelsPath)
-	must(err)
+	Must(err)
 
 	// summary counts
 	logrus.Debugf("Loaded %d total queries, %d queries with qrels\n\n",
@@ -43,7 +43,7 @@ func debugScifactFull(
 
 	// evaluator setup
 	reader, err := bluge.OpenReader(bluge.DefaultConfig(idxPath))
-	must(err)
+	Must(err)
 	defer reader.Close()
 
 	bar := progressbar.Default(int64(sampleQ), "debug")
@@ -59,7 +59,7 @@ func debugScifactFull(
 		}
 		printed++
 
-		// show the query and its ground-truth
+		// show the Query and its ground-truth
 		logrus.Debugf("=== Query #%d: ID=%s\n  \"%s\"\n", printed, q.ID, q.Text)
 		logrus.Debugf("  Relevant docs: %v\n", mapKeys(docs))
 
@@ -78,7 +78,7 @@ func debugScifactFull(
 			}
 			// extract the stored "_id" field
 			var docID string
-			must(match.VisitStoredFields(func(f string, v []byte) bool {
+			Must(match.VisitStoredFields(func(f string, v []byte) bool {
 				if f == "_id" {
 					docID = string(v)
 					return false

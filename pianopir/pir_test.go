@@ -3,7 +3,6 @@ package pianopir
 import (
 	"math"
 	"math/rand"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -263,14 +262,14 @@ func TestBatchPIRBasic(t *testing.T) {
 
 func TestBatchPIRBasicWithStrings(t *testing.T) {
 
-	stringDB := make([]string, 1000)
+	//stringDB := make([]string, 1000)
+	//
+	//for i := 0; i < 1000; i++ {
+	//	stringDB[i] = strconv.Itoa(i)
+	//}
 
-	for i := 0; i < 1000; i++ {
-		stringDB[i] = strconv.Itoa(i)
-	}
-
-	// nonFlatDB := bins.PirPreprocessAndLoadData("../index_scifact")
-	nonFlatDB, _, _ := bins.StringsToUint64Grid(stringDB)
+	nonFlatDB := bins.PirPreprocessAndLoadData("../index_marco")
+	//nonFlatDB, _, _ := bins.StringsToUint64Grid(stringDB)
 
 	BatchSize := uint64(math.Sqrt(float64(len(nonFlatDB))))
 
@@ -429,26 +428,27 @@ func TestBatchPIRBasicWithUnigramBins(t *testing.T) {
 	reader, _ := bluge.OpenReader(bluge.DefaultConfig(d.IndexDir))
 
 	unigram_config := bins.Config{
-		K:       10,
-		D:       1,
-		MaxBins: 500,
+		K:         10,
+		D:         1,
+		MaxBins:   uint(8800000 / 100),
+		Filenames: true,
 	}
 
 	var DB = bins.MakeUnigramDB(reader, d, unigram_config)
 
 	//the encoder expects a more traditional DB, i.e. a single index to a single entry. As a 'hack' I'm going to
-	// change the index's of bins into a string seperated by "--!--" and just encode and decode on the client/server
+	// change the index's of bins into a string seperated by "-!-" and just encode and decode on the client/server
 
 	new_DB := make([]string, len(DB))
 
 	for i, entry := range DB {
-		new_DB[i] = strings.Join(entry, "--!--")
+		new_DB[i] = strings.Join(entry, "-!-")
 	}
 
 	// nonFlatDB := bins.PirPreprocessAndLoadData("../index_scifact")
 	nonFlatDB, _, _ := bins.StringsToUint64Grid(new_DB)
 
-	BatchSize := uint64(math.Sqrt(float64(len(nonFlatDB))))
+	BatchSize := uint64(64) // this should be |q| * 1.5
 
 	DBSize := uint64(len(nonFlatDB))
 	DBEntrySize := uint64(len(nonFlatDB[0]))
