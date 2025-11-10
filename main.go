@@ -243,7 +243,7 @@ func main() {
 
 		logrus.Infof("Search time: %d seconds", avgTime)
 
-		qidsToDocids := bins.FromEmbedToID(answers, bm_25_vectors, DIM)
+		qidsToDocids := bins.FromEmbedToID(answers, bm_25_vectors, DIM, max_row_size)
 
 		WriteCSV("results.csv", qidsToDocids)
 

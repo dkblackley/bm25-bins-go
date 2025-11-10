@@ -161,7 +161,7 @@ func hashFloat32s(xs []float32) string {
 
 // Takes in the original embeddings of the queries (assumed to be in order, i.e. first item has docID 1) and the answers
 // To the queries, also assumed to be in order (i.e. 1st answer is qid 1)
-func FromEmbedToID(answers [][][]uint64, originalEmbeddings [][]float32, dim int) [][]string {
+func FromEmbedToID(answers [][][]uint64, originalEmbeddings [][]float32, dim int, maxRowSize int) [][]string {
 
 	new_answers := make([][][][]float32, len(answers))
 
@@ -170,7 +170,7 @@ func FromEmbedToID(answers [][][]uint64, originalEmbeddings [][]float32, dim int
 		new_answers[i] = make([][][]float32, len(answers[i]))
 		for k := 1; k <= len(answers); k++ {
 			entry := answers[i][k]
-			f32Entry := DecodeEntryToVectors(entry, dim, len(entry)/(dim*4))
+			f32Entry := DecodeEntryToVectors(entry, dim, maxRowSize)
 			f32Entry = TrimZeroRows(f32Entry)
 			new_answers[i][k] = f32Entry
 		}
