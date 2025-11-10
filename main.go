@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/blugelabs/bluge"
 	"github.com/blugelabs/bluge/analysis"
 	"github.com/blugelabs/bluge/analysis/char"
 	"github.com/blugelabs/bluge/analysis/lang/en"
@@ -26,6 +27,8 @@ import (
 )
 
 const MAX_UINT32 = ^uint32(0)
+const MARCO_SIZE = 8841823
+const DIM = 192
 
 // WriteCSV writes a [][]string as CSV.
 func WriteCSV(path string, data [][]string) error {
@@ -115,20 +118,20 @@ func main() {
 
 		// Grab the data in normalised size bytes:
 
-		//reader, _ := bluge.OpenReader(bluge.DefaultConfig(d.IndexDir))
-		//defer reader.Close()
-		//
-		//config := bins.Config{
-		//	K:         100,
-		//	D:         1,
-		//	MaxBins:   50000,
-		//	Threshold: 3,
-		//}
-		//var DB = bins.MakeUnigramDB(reader, d, config)
-		//err := WriteCSV("marco.csv", DB)
-		//bins.Must(err)
+		reader, _ := bluge.OpenReader(bluge.DefaultConfig(d.IndexDir))
+		defer reader.Close()
 
-		DB, err := ReadCSV("marco.csv")
+		config := bins.Config{
+			K:         100,
+			D:         1,
+			MaxBins:   MARCO_SIZE / 10,
+			Threshold: 3,
+		}
+		var DB = bins.MakeUnigramDB(reader, d, config)
+		err := WriteCSV("marco.csv", DB)
+		bins.Must(err)
+
+		DB, err = ReadCSV("marco.csv")
 		bins.Must(err)
 
 		//
@@ -150,9 +153,7 @@ func main() {
 		//the encoder expects a more traditional DB, i.e. a single index to a single entry. As a 'hack' I'm going to
 		// change the index's of bins into a string seperated by "--!--" and just encode and decode on the client/server
 
-		dimension := 192
-		ms_marco_size := 8841823
-		bm_25_vectors, err := bins.LoadFloat32MatrixFromNpy(root+"/Son/my_vectors_192.npy", ms_marco_size, dimension)
+		bm_25_vectors, err := bins.LoadFloat32MatrixFromNpy(root+"/Son/my_vectors_192.npy", MARCO_SIZE, DIM)
 
 		// TODO: Something with .npy.id file
 
@@ -165,7 +166,7 @@ func main() {
 		//}
 
 		bins.Must(err)
-		pad := make([]float32, dimension) // zeros; or fill with 1s once if you need
+		pad := make([]float32, DIM) // zeros; or fill with 1s once if you need
 		max_row_size := 0
 		redundancy := 0
 		for _, e := range DB {
@@ -203,16 +204,16 @@ func main() {
 
 		runtime.GC()
 
-		b := uint64(len(new_DB)) * uint64(max_row_size) * uint64(dimension) * 4
+		b := uint64(len(new_DB)) * uint64(max_row_size) * uint64(DIM) * 4
 		logrus.Infof("New DB size: %.2f MiB (%d bytes)", float64(b)/(1<<20), b)
 
-		logrus.Infof("Marco vectors: %.2f GiB", float64(ms_marco_size*dimension*4)/(1<<30))
+		logrus.Infof("Marco vectors: %.2f GiB", float64(MARCO_SIZE*DIM*4)/(1<<30))
 		logrus.Infof("Max row size: %d", max_row_size)
 		logrus.Infof("Padded files %d", redundancy)
 
 		// PIR setup
 		start := time.Now()
-		bin_PIR := Preprocess(new_DB, dimension, max_row_size)
+		bin_PIR := Preprocess(new_DB, DIM, max_row_size)
 		end := time.Now()
 
 		queries, er := bins.LoadQueries(d.Queries)
@@ -242,7 +243,7 @@ func main() {
 
 		logrus.Infof("Search time: %d seconds", avgTime)
 
-		qidsToDocids := bins.FromEmbedToID(answers, bm_25_vectors, dimension)
+		qidsToDocids := bins.FromEmbedToID(answers, bm_25_vectors, DIM)
 
 		WriteCSV("results.csv", qidsToDocids)
 
