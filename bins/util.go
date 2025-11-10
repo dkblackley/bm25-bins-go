@@ -170,7 +170,7 @@ func FromEmbedToID(answers [][][]uint64, originalEmbeddings [][]float32, dim int
 		new_answers[i] = make([][][]float32, len(answers[i]))
 		for k := 1; k <= len(answers); k++ {
 			entry := answers[i][k]
-			f32Entry := DecodeEntryToVectors(entry, dim, len(entry))
+			f32Entry := DecodeEntryToVectors(entry, dim, len(entry)/(dim*4))
 			f32Entry = TrimZeroRows(f32Entry)
 			new_answers[i][k] = f32Entry
 		}
