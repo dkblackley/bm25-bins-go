@@ -68,8 +68,8 @@ func main() {
 		FullTimestamp: true,
 	})
 
-	// root := "/home/yelnat/Documents/Nextcloud/10TB-STHDD/datasets"
-	root := "/home/yelnat/Nextcloud/10TB-STHDD/datasets"
+	root := "/home/yelnat/Documents/Nextcloud/10TB-STHDD/datasets"
+	// root := "/home/yelnat/Nextcloud/10TB-STHDD/datasets"
 	//debugScifactFull(
 	//	"index_scifact",
 	//	root+"/scifact/queries.jsonl",
@@ -240,7 +240,11 @@ func main() {
 		searchTime := end.Sub(start) - maintainenceTime
 		avgTime := searchTime.Seconds() / float64(len(queries))
 
-		logrus.Infof("Search time: %d", avgTime)
+		logrus.Infof("Search time: %d seconds", avgTime)
+
+		qidsToDocids := bins.FromEmbedToID(answers, bm_25_vectors, dimension)
+
+		WriteCSV("results.csv", qidsToDocids)
 
 	}
 
