@@ -13,7 +13,6 @@ import (
 
 	"github.com/blugelabs/bluge"
 	"github.com/schollz/progressbar/v3"
-	"github.com/sirupsen/logrus"
 )
 
 // Used to convert beir data into formate for go bm25
@@ -193,44 +192,38 @@ func HashFloat32s(xs []float32) string {
 }
 
 // Takes in the original embeddings of the queries (assumed to be in order, i.e. first item has docID 1) and the answers
-// To the queries, assumed to be a mapping of qid to answer
+// to the queries, assumed to be a mapping of qid to answer
 func FromEmbedToID(answers map[string][][]uint64, IDLookup map[string]int, dim int) map[string][]string {
+	// Result: qid -> list of DocIDs (as strings, unchanged)
+	queryIDstoDocIDS := make(map[string][]string, len(answers))
 
-	new_answers := make(map[string][][][]float32, len(answers))
+	for qid, answer := range answers { // each answer = slices of entries in DB (per word)
+		// Small capacity hint to reduce reallocs; tune if you know more about average rows/entry.
+		dst := make([]string, 0, 8*len(answer))
 
-	// Each answer has multiple entries in its answer
-	for qid, answer := range answers { // this is a single answer, each index on the top level is an array of entries in DB (for each word)
-		new_answers[qid] = make([][][]float32, len(answer))
 		for k := 0; k < len(answer); k++ {
 			entry := answer[k]
+
 			f32Entry, err := DecodeEntryToVectors(entry, dim)
 			Must(err)
+
 			f32Entry = TrimZeroRows(f32Entry)
-			new_answers[qid][k] = f32Entry
-		}
-	}
 
-	queryIDstoDocIDS := make(map[string][]string, len(new_answers))
-
-	for qid, new_answer := range new_answers { // the qid and array of multiple IDS
-		for k := 0; k < len(new_answer); k++ { // An array docIDs
-			for q := 0; q < len(new_answer[k]); q++ { // A single doc embedding
-				key := HashFloat32s(new_answer[k][q])
-				DocID := IDLookup[key]
-
-				if DocID == 0 {
-					logrus.Errorf("BAD ID?")
+			for q := 0; q < len(f32Entry); q++ {
+				key := HashFloat32s(f32Entry[q])
+				docID, ok := IDLookup[key]
+				if !ok || docID == 0 {
+					// Avoid spamming logs if there are many misses. Count if needed.
+					// logrus.Debugf("missing docID for qid=%s", qid)
+					continue
 				}
-
-				if queryIDstoDocIDS[qid] == nil {
-					queryIDstoDocIDS[qid] = []string{}
-				}
-
-				queryIDstoDocIDS[qid] = append(queryIDstoDocIDS[qid], strconv.Itoa(DocID))
+				dst = append(dst, strconv.Itoa(docID))
 			}
+			// f32Entry goes out of scope here; nothing retained → GC can reclaim quickly.
 		}
+
+		queryIDstoDocIDS[qid] = dst
 	}
 
 	return queryIDstoDocIDS
-
 }
