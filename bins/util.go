@@ -5,11 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log"
 	"math"
 	"strconv"
-	"errors"
 
 	"github.com/blugelabs/bluge"
 	"github.com/schollz/progressbar/v3"
@@ -122,8 +122,7 @@ func DecodeEntryToVectors(entry []uint64, Dim int) ([][]float32, error) {
 		)
 	}
 
-		maxRowSize := rowsInEntry
-
+	maxRowSize := rowsInEntry
 
 	// Sanity check: expected words given (Dim, maxRowSize)
 	expectedWords := (Dim * 4 * maxRowSize) / 8
@@ -166,7 +165,6 @@ func DecodeEntryToVectors(entry []uint64, Dim int) ([][]float32, error) {
 	return out, nil
 }
 
-
 // TrimZeroRows removes rows that are entirely 0.0 (from padding).
 func TrimZeroRows(vv [][]float32) [][]float32 {
 	out := vv[:0]
@@ -183,7 +181,7 @@ RowLoop:
 	return out
 }
 
-func hashFloat32s(xs []float32) string {
+func HashFloat32s(xs []float32) string {
 	buf := make([]byte, 4*len(xs))
 	for i, f := range xs {
 		bits := math.Float32bits(f)
@@ -195,48 +193,40 @@ func hashFloat32s(xs []float32) string {
 }
 
 // Takes in the original embeddings of the queries (assumed to be in order, i.e. first item has docID 1) and the answers
-// To the queries, also assumed to be in order (i.e. 1st answer is qid 1)
-func FromEmbedToID(answers [][][]uint64, originalEmbeddings [][]float32, dim int) [][]string {
+// To the queries, assumed to be a mapping of qid to answer
+func FromEmbedToID(answers map[string][][]uint64, IDLookup map[string]int, dim int) map[string][]string {
 
-	new_answers := make([][][][]float32, len(answers))
+	new_answers := make(map[string][][][]float32, len(answers))
 
 	// Each answer has multiple entries in its answer
-	for i := 1; i <= len(answers); i++ {
-		new_answers[i] = make([][][]float32, len(answers[i]))
-		for k := 1; k <= len(answers[i]); k++ {
-			entry := answers[i][k]
+	for qid, answer := range answers { // this is a single answer, each index on the top level is an array of entries in DB (for each word)
+		new_answers[qid] = make([][][]float32, len(answer))
+		for k := 0; k < len(answer); k++ {
+			entry := answer[k]
 			f32Entry, err := DecodeEntryToVectors(entry, dim)
 			Must(err)
 			f32Entry = TrimZeroRows(f32Entry)
-			new_answers[i][k] = f32Entry
+			new_answers[qid][k] = f32Entry
 		}
 	}
 
-	// Make a map for rapid lookup later:
-	IDLookup := make(map[string]int)
+	queryIDstoDocIDS := make(map[string][]string, len(new_answers))
 
-	for i := 1; i <= len(originalEmbeddings); i++ {
-		ID := hashFloat32s(originalEmbeddings[i])
-		IDLookup[ID] = i
-	}
-
-	queryIDstoDocIDS := make([][]string, len(new_answers))
-
-	for i := 1; i <= len(new_answers); i++ { // the qid
-		for k := 1; k <= len(new_answers[i]); k++ { // the multiple docIDs
-			for q := 1; q <= len(new_answers[i][k]); q++ { // A single doc embedding
-				key := hashFloat32s(new_answers[i][k][q])
+	for qid, new_answer := range new_answers { // the qid and array of multiple IDS
+		for k := 0; k < len(new_answer); k++ { // An array docIDs
+			for q := 0; q < len(new_answer[k]); q++ { // A single doc embedding
+				key := HashFloat32s(new_answer[k][q])
 				DocID := IDLookup[key]
 
 				if DocID == 0 {
 					logrus.Errorf("BAD ID?")
 				}
 
-				if queryIDstoDocIDS[DocID] == nil {
-					queryIDstoDocIDS[DocID] = []string{}
+				if queryIDstoDocIDS[qid] == nil {
+					queryIDstoDocIDS[qid] = []string{}
 				}
 
-				queryIDstoDocIDS[i] = append(queryIDstoDocIDS[i], strconv.Itoa(DocID))
+				queryIDstoDocIDS[qid] = append(queryIDstoDocIDS[qid], strconv.Itoa(DocID))
 			}
 		}
 	}

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/csv"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"math"
@@ -28,6 +29,25 @@ import (
 const MAX_UINT32 = ^uint32(0)
 const MARCO_SIZE = 8841823
 const DIM = 192
+
+func WriteJSON(filename string, data map[string][]string) {
+	f, err := os.Create(filename)
+	if err != nil {
+		fmt.Printf("Error creating file: %v\n", err)
+		return
+	}
+	defer f.Close()
+
+	encoder := json.NewEncoder(f)
+	// If you want pretty/indented output:
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(data); err != nil {
+		fmt.Printf("Error encoding JSON: %v\n", err)
+		return
+	}
+
+	fmt.Println("Written JSON to file")
+}
 
 // WriteCSV writes a [][]string as CSV.
 func WriteCSV(path string, data [][]string) error {
@@ -71,7 +91,7 @@ func main() {
 	})
 
 	root := "../datasets"
-	// root := "/home/yelnat/Nextcloud/10TB-STHDD/datasets"
+	// root := "/home/yelnat/Documents/Nextcloud/10TB-STHDD/datasets/"
 	//debugScifactFull(
 	//	"index_scifact",
 	//	root+"/scifact/queries.jsonl",
@@ -110,6 +130,7 @@ func main() {
 	}
 
 	for _, d := range datasets {
+
 		// mrr := bins.MrrAtK(d.indexDir, d.queries, d.qrels, *k)
 		//fmt.Println("---------- MRR evaluation ----------")
 		//fmt.Printf("k = %d\n\n", *k)
@@ -167,9 +188,17 @@ func main() {
 
 		answers := doPIR(DB, bm25Vectors, d)
 
-		qidsToDocids := bins.FromEmbedToID(answers, bm25Vectors, DIM)
+		// Make a map for rapid lookup later:
+		IDLookup := make(map[string]int)
 
-		WriteCSV("results.csv", qidsToDocids)
+		for i := 0; i <= len(bm25Vectors); i++ {
+			ID := bins.HashFloat32s(bm25Vectors[i])
+			IDLookup[ID] = i
+		}
+
+		qidsToDocids := bins.FromEmbedToID(answers, IDLookup, DIM)
+
+		WriteJSON("results.json", qidsToDocids)
 
 	}
 
@@ -177,7 +206,7 @@ func main() {
 
 // ---- PIR stuff
 
-func doPIR(DB [][]string, bm25Vectors [][]float32, d bins.DatasetMetadata) [][][]uint64 {
+func doPIR(DB [][]string, bm25Vectors [][]float32, d bins.DatasetMetadata) map[string][][]uint64 {
 
 	pad := make([]float32, DIM) // zeros; or fill with 1s once if you need
 	max_row_size := 0
@@ -230,14 +259,16 @@ func doPIR(DB [][]string, bm25Vectors [][]float32, d bins.DatasetMetadata) [][][
 	queries, er := bins.LoadQueries(d.Queries)
 	bins.Must(er)
 
-	answers := make([][][]uint64, len(queries))
+	answers := make(map[string][][]uint64, len(queries))
 	maintainenceTime := time.Duration(0)
 
 	// windowSize := queryEngine.PIR.SupportBatchNum / (uint64(*stepN) * uint64(*parallelN)) // For logging
 	start = time.Now()
 	for i := 0; i < len(queries); i++ {
 
-		answers[i] = BinSearch(queries[i], 1, bin_PIR)
+		q := queries[i]
+
+		answers[q.ID] = BinSearch(queries[i], 1, bin_PIR)
 
 		if bin_PIR.PIR.FinishedBatchNum >= bin_PIR.PIR.SupportBatchNum {
 			// in this case we need to re-run the preprocessing
