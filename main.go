@@ -71,7 +71,7 @@ func main() {
 		FullTimestamp: true,
 	})
 
-	root := "/home/yelnat/Documents/Nextcloud/10TB-STHDD/datasets"
+	root := "../datasets"
 	// root := "/home/yelnat/Nextcloud/10TB-STHDD/datasets"
 	//debugScifactFull(
 	//	"index_scifact",
@@ -243,7 +243,7 @@ func main() {
 
 		logrus.Infof("Search time: %d seconds", avgTime)
 
-		qidsToDocids := bins.FromEmbedToID(answers, bm_25_vectors, DIM, max_row_size)
+		qidsToDocids := bins.FromEmbedToID(answers, bm_25_vectors, DIM)
 
 		WriteCSV("results.csv", qidsToDocids)
 

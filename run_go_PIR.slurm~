@@ -1,0 +1,39 @@
+#!/bin/bash
+#SBATCH --job-name=go_job
+#SBATCH --partition=bigmem
+#SBATCH --output=go.out
+#SBATCH --error=go.err
+#SBATCH --cpus-per-task=16
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --mem=240G
+#SBATCH --time=2-00:30:00
+
+set -euo pipefail
+cd "$SLURM_SUBMIT_DIR"
+
+# Make sure Lmod 'module' is available (usually it is on Hopper login/compute)
+type module >/dev/null 2>&1 || source /usr/share/lmod/lmod/init/bash
+
+# Reset to Hopper defaults, then load Go
+module purge
+module load hosts/hopper
+module load go/1.20.6   # per ORC software list
+
+# Sanity check
+echo "Go toolchain: $(go version)"
+
+# Use all CPUs Slurm gave you; keep caches off $HOME
+export GOMAXPROCS="${SLURM_CPUS_PER_TASK:-1}"
+export GOPATH="${SLURM_TMPDIR:-/tmp}/${USER}/gopath"
+export GOMODCACHE="${GOPATH}/pkg/mod"
+mkdir -p "$GOMODCACHE"
+
+# If compute nodes can't access the Internet, vendor deps beforehand:
+#   go mod vendor
+# and then uncomment:
+# export GOFLAGS="-mod=vendor"
+
+# Build & run
+go build -v -o app ./main.go
+srun ./app

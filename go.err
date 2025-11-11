@@ -1,0 +1,10 @@
+
+Currently Loaded Modules:
+  1) use.own     4) gnu9/9.3.0         7) hwloc/2.1.0     10) go/1.23.1
+  2) autotools   5) ucx/1.12.1-4g      8) openmpi4/4.0.4
+  3) prun/2.0    6) libfabric/1.10.1   9) hosts/hopper
+
+ 
+
+github.com/dkblackley/bm25-bins-go/bins
+command-line-arguments

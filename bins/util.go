@@ -9,6 +9,7 @@ import (
 	"log"
 	"math"
 	"strconv"
+	"errors"
 
 	"github.com/blugelabs/bluge"
 	"github.com/schollz/progressbar/v3"
@@ -97,27 +98,60 @@ func MrrAtK(idxPath, queriesPath, qrelsPath string, k int) float64 {
 	return sumRR / float64(len(rels))
 }
 
-func DecodeEntryToVectors(entry []uint64, Dim, maxRowSize int) [][]float32 {
-	dbEntrySize := Dim * 4 * maxRowSize
-	wordsPerEntry := dbEntrySize / 8
-
-	if len(entry) < wordsPerEntry {
-		// You can return an error instead if you prefer.
-		panic("DecodeEntryToVectors: entry too small for given Dim/maxRowSize")
+func DecodeEntryToVectors(entry []uint64, Dim int) ([][]float32, error) {
+	if Dim <= 0 {
+		return nil, errors.New("DecodeEntryToVectors: Dim must be > 0")
+	}
+	if len(entry) == 0 {
+		return nil, errors.New("DecodeEntryToVectors: empty entry")
 	}
 
-	// 1) Rebuild the raw bytes from uint64 words (little-endian)
-	entryBytes := make([]byte, wordsPerEntry*8)
-	for k := 0; k < wordsPerEntry; k++ {
+	bytesInEntry := len(entry) * 8
+	bytesPerRow := Dim * 4
+	if bytesPerRow == 0 {
+		return nil, errors.New("DecodeEntryToVectors: invalid bytesPerRow (Dim?)")
+	}
+
+	// If caller didn't provide maxRowSize (or it's wrong), try to infer from entry size.
+	rowsInEntry := bytesInEntry / bytesPerRow
+	if bytesInEntry%bytesPerRow != 0 {
+		return nil, fmt.Errorf(
+			"DecodeEntryToVectors: entry size (%d bytes) is not a multiple of row size (%d bytes). "+
+				"Dim mismatch? len(entry)=%d",
+			bytesInEntry, bytesPerRow, len(entry),
+		)
+	}
+
+		maxRowSize := rowsInEntry
+
+
+	// Sanity check: expected words given (Dim, maxRowSize)
+	expectedWords := (Dim * 4 * maxRowSize) / 8
+	if expectedWords != len(entry) {
+		// If the full entry contains fewer/more rows than declared maxRowSize, prefer the
+		// rows actually present to avoid out-of-range.
+		maxRowSize = rowsInEntry
+		expectedWords = (Dim * 4 * maxRowSize) / 8
+		if expectedWords != len(entry) {
+			return nil, fmt.Errorf(
+				"DecodeEntryToVectors: size mismatch. expectedWords=%d (Dim=%d, rows=%d), got len(entry)=%d. "+
+					"Use the same (Dim,maxRowSize) used at encode time.",
+				expectedWords, Dim, maxRowSize, len(entry),
+			)
+		}
+	}
+
+	// Rebuild the raw bytes from uint64 words (little-endian)
+	entryBytes := make([]byte, len(entry)*8)
+	for k := 0; k < len(entry); k++ {
 		binary.LittleEndian.PutUint64(entryBytes[k*8:], entry[k])
 	}
 
-	// 2) Slice bytes back into rows, then into float32 elements
+	// Slice back into rows and floats
 	out := make([][]float32, maxRowSize)
-	rowByteSpan := Dim * 4
 	for r := 0; r < maxRowSize; r++ {
-		start := r * rowByteSpan
-		end := start + rowByteSpan
+		start := r * bytesPerRow
+		end := start + bytesPerRow
 		rowBytes := entryBytes[start:end]
 
 		row := make([]float32, Dim)
@@ -129,8 +163,9 @@ func DecodeEntryToVectors(entry []uint64, Dim, maxRowSize int) [][]float32 {
 		out[r] = row
 	}
 
-	return out
+	return out, nil
 }
+
 
 // TrimZeroRows removes rows that are entirely 0.0 (from padding).
 func TrimZeroRows(vv [][]float32) [][]float32 {
@@ -161,16 +196,17 @@ func hashFloat32s(xs []float32) string {
 
 // Takes in the original embeddings of the queries (assumed to be in order, i.e. first item has docID 1) and the answers
 // To the queries, also assumed to be in order (i.e. 1st answer is qid 1)
-func FromEmbedToID(answers [][][]uint64, originalEmbeddings [][]float32, dim int, maxRowSize int) [][]string {
+func FromEmbedToID(answers [][][]uint64, originalEmbeddings [][]float32, dim int) [][]string {
 
 	new_answers := make([][][][]float32, len(answers))
 
 	// Each answer has multiple entries in its answer
 	for i := 1; i <= len(answers); i++ {
 		new_answers[i] = make([][][]float32, len(answers[i]))
-		for k := 1; k <= len(answers); k++ {
+		for k := 1; k <= len(answers[i]); k++ {
 			entry := answers[i][k]
-			f32Entry := DecodeEntryToVectors(entry, dim, maxRowSize)
+			f32Entry, err := DecodeEntryToVectors(entry, dim)
+			Must(err)
 			f32Entry = TrimZeroRows(f32Entry)
 			new_answers[i][k] = f32Entry
 		}
