@@ -191,7 +191,7 @@ func main() {
 		// Make a map for rapid lookup later:
 		IDLookup := make(map[string]int)
 
-		for i := 0; i <= len(bm25Vectors); i++ {
+		for i := 0; i < len(bm25Vectors); i++ {
 			ID := bins.HashFloat32s(bm25Vectors[i])
 			IDLookup[ID] = i
 		}
