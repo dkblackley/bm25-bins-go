@@ -14,7 +14,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/blugelabs/bluge"
 	"github.com/blugelabs/bluge/analysis"
 	"github.com/blugelabs/bluge/analysis/char"
 	"github.com/blugelabs/bluge/analysis/lang/en"
@@ -118,25 +117,28 @@ func main() {
 
 		// Grab the data in normalised size bytes:
 
-		reader, _ := bluge.OpenReader(bluge.DefaultConfig(d.IndexDir))
-		defer reader.Close()
-
-		config := bins.Config{
-			K:         100,
-			D:         1,
-			MaxBins:   MARCO_SIZE / 10,
-			Threshold: 3,
-		}
-		var DB = bins.MakeUnigramDB(reader, d, config)
-		err := WriteCSV("marco.csv", DB)
+		bm25Vectors, err := bins.LoadFloat32MatrixFromNpy(root+"/Son/my_vectors_192.npy", MARCO_SIZE, DIM)
 		bins.Must(err)
 
-		DB, err = ReadCSV("marco.csv")
+		//reader, _ := bluge.OpenReader(bluge.DefaultConfig(d.IndexDir))
+		//defer reader.Close()
+		//
+		//config := bins.Config{
+		//	K:         100,
+		//	D:         1,
+		//	MaxBins:   MARCO_SIZE / 10,
+		//	Threshold: 3,
+		//}
+		//var DB = bins.MakeUnigramDB(reader, d, config)
+		//err = WriteCSV("marco.csv", DB)
+		//bins.Must(err)
+
+		DB, err := ReadCSV("marco.csv")
 		bins.Must(err)
 
 		//
 		//if len(DB) != len(DB_2) {
-		//	logrus.Errorf("Something wrong %d, %d", len(DB), len(DB_2))
+		//[][][]uint64	logrus.Errorf("Something wrong %d, %d", len(DB), len(DB_2))
 		//}
 		//for i := range DB {
 		//	if len(DB[i]) != len(DB_2[i]) {
@@ -153,8 +155,6 @@ func main() {
 		//the encoder expects a more traditional DB, i.e. a single index to a single entry. As a 'hack' I'm going to
 		// change the index's of bins into a string seperated by "--!--" and just encode and decode on the client/server
 
-		bm_25_vectors, err := bins.LoadFloat32MatrixFromNpy(root+"/Son/my_vectors_192.npy", MARCO_SIZE, DIM)
-
 		// TODO: Something with .npy.id file
 
 		//TODO Remove this debug sampling
@@ -165,85 +165,9 @@ func main() {
 		//	DB = DB[:sampleRows]
 		//}
 
-		bins.Must(err)
-		pad := make([]float32, DIM) // zeros; or fill with 1s once if you need
-		max_row_size := 0
-		redundancy := 0
-		for _, e := range DB {
-			if len(e) > max_row_size {
-				max_row_size = len(e)
-			}
-		}
-		//if max_row_size > sampleCols {
-		//	max_row_size = sampleCols
-		//}
+		answers := doPIR(DB, bm25Vectors, d)
 
-		new_DB := make([][][]float32, 0, len(DB))
-		for _, entry := range DB {
-			row := make([][]float32, 0, max_row_size)
-			// cap columns
-			upto := len(entry)
-			if upto > max_row_size {
-				upto = max_row_size
-			}
-			for j := 0; j < upto; j++ {
-				id64, err := strconv.ParseUint(entry[j], 10, 32)
-				bins.Must(err)
-				row = append(row, bm_25_vectors[id64]) // shares the row slice; no copy
-			}
-			for len(row) < max_row_size {
-				redundancy++
-				row = append(row, pad) // shared, no per-cell alloc
-			}
-			new_DB = append(new_DB, row)
-		}
-		//bm_25_vectors = nil
-		DB = nil
-		//TODO remove this
-		// new_DB = new_DB[:100]
-
-		runtime.GC()
-
-		b := uint64(len(new_DB)) * uint64(max_row_size) * uint64(DIM) * 4
-		logrus.Infof("New DB size: %.2f MiB (%d bytes)", float64(b)/(1<<20), b)
-
-		logrus.Infof("Marco vectors: %.2f GiB", float64(MARCO_SIZE*DIM*4)/(1<<30))
-		logrus.Infof("Max row size: %d", max_row_size)
-		logrus.Infof("Padded files %d", redundancy)
-
-		// PIR setup
-		start := time.Now()
-		bin_PIR := Preprocess(new_DB, DIM, max_row_size)
-		end := time.Now()
-
-		queries, er := bins.LoadQueries(d.Queries)
-		bins.Must(er)
-
-		answers := make([][][]uint64, len(queries))
-		maintainenceTime := time.Duration(0)
-
-		// windowSize := queryEngine.PIR.SupportBatchNum / (uint64(*stepN) * uint64(*parallelN)) // For logging
-		start = time.Now()
-		for i := 0; i < len(queries); i++ {
-
-			answers[i] = BinSearch(queries[i], 1, bin_PIR)
-
-			if bin_PIR.PIR.FinishedBatchNum >= bin_PIR.PIR.SupportBatchNum {
-				// in this case we need to re-run the preprocessing
-				start := time.Now()
-				bin_PIR.PIR.Preprocessing()
-				end := time.Now()
-				maintainenceTime += end.Sub(start)
-			}
-		}
-		end = time.Now()
-
-		searchTime := end.Sub(start) - maintainenceTime
-		avgTime := searchTime.Seconds() / float64(len(queries))
-
-		logrus.Infof("Search time: %d seconds", avgTime)
-
-		qidsToDocids := bins.FromEmbedToID(answers, bm_25_vectors, DIM)
+		qidsToDocids := bins.FromEmbedToID(answers, bm25Vectors, DIM)
 
 		WriteCSV("results.csv", qidsToDocids)
 
@@ -252,6 +176,87 @@ func main() {
 }
 
 // ---- PIR stuff
+
+func doPIR(DB [][]string, bm25Vectors [][]float32, d bins.DatasetMetadata) [][][]uint64 {
+
+	pad := make([]float32, DIM) // zeros; or fill with 1s once if you need
+	max_row_size := 0
+	redundancy := 0
+	for _, e := range DB {
+		if len(e) > max_row_size {
+			max_row_size = len(e)
+		}
+	}
+	//if max_row_size > sampleCols {
+	//	max_row_size = sampleCols
+	//}
+
+	new_DB := make([][][]float32, 0, len(DB))
+	for _, entry := range DB {
+		row := make([][]float32, 0, max_row_size)
+		// cap columns
+		upto := len(entry)
+		if upto > max_row_size {
+			upto = max_row_size
+		}
+		for j := 0; j < upto; j++ {
+			id64, err := strconv.ParseUint(entry[j], 10, 32)
+			bins.Must(err)
+			row = append(row, bm25Vectors[id64]) // shares the row slice; no copy
+		}
+		for len(row) < max_row_size {
+			redundancy++
+			row = append(row, pad) // shared, no per-cell alloc
+		}
+		new_DB = append(new_DB, row)
+	}
+	//bm_25_vectors = nil
+	DB = nil
+
+	runtime.GC()
+
+	b := uint64(len(new_DB)) * uint64(max_row_size) * uint64(DIM) * 4
+	logrus.Infof("New DB size: %.2f MiB (%d bytes)", float64(b)/(1<<20), b)
+
+	logrus.Infof("Marco vectors: %.2f GiB", float64(MARCO_SIZE*DIM*4)/(1<<30))
+	logrus.Infof("Max row size: %d", max_row_size)
+	logrus.Infof("Padded files %d", redundancy)
+
+	// PIR setup
+	start := time.Now()
+	bin_PIR := Preprocess(new_DB, DIM, max_row_size)
+	end := time.Now()
+
+	queries, er := bins.LoadQueries(d.Queries)
+	bins.Must(er)
+
+	answers := make([][][]uint64, len(queries))
+	maintainenceTime := time.Duration(0)
+
+	// windowSize := queryEngine.PIR.SupportBatchNum / (uint64(*stepN) * uint64(*parallelN)) // For logging
+	start = time.Now()
+	for i := 0; i < len(queries); i++ {
+
+		answers[i] = BinSearch(queries[i], 1, bin_PIR)
+
+		if bin_PIR.PIR.FinishedBatchNum >= bin_PIR.PIR.SupportBatchNum {
+			// in this case we need to re-run the preprocessing
+			start := time.Now()
+			bin_PIR.PIR.Preprocessing()
+			end := time.Now()
+			maintainenceTime += end.Sub(start)
+		}
+	}
+	end = time.Now()
+
+	searchTime := end.Sub(start) - maintainenceTime
+	avgTime := searchTime.Seconds() / float64(len(queries))
+
+	logrus.Infof("Search time: %d seconds", avgTime)
+
+	return answers
+
+}
 
 type PIRBins struct {
 	N       int // Items in DB
