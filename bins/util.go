@@ -208,7 +208,7 @@ func FromEmbedToID(answers map[string][][]uint64, IDLookup map[string]int, dim i
 			f32Entry, err := DecodeEntryToVectors(entry, dim)
 			Must(err)
 
-			// f32Entry = TrimZeroRows(f32Entry)
+			f32Entry = TrimZeroRows(f32Entry)
 
 			for q := 0; q < len(f32Entry); q++ {
 				key := HashFloat32s(f32Entry[q])
