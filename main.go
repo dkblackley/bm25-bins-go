@@ -188,6 +188,8 @@ func main() {
 
 		answers := doPIR(DB, bm25Vectors, d)
 
+		logrus.Debugf("Number of answers: %d", len(answers))
+
 		// Make a map for rapid lookup later:
 		IDLookup := make(map[string]int)
 

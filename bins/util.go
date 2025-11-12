@@ -13,6 +13,7 @@ import (
 
 	"github.com/blugelabs/bluge"
 	"github.com/schollz/progressbar/v3"
+	"github.com/sirupsen/logrus"
 )
 
 // Used to convert beir data into formate for go bm25
@@ -213,16 +214,22 @@ func FromEmbedToID(answers map[string][][]uint64, IDLookup map[string]int, dim i
 				key := HashFloat32s(f32Entry[q])
 				docID, ok := IDLookup[key]
 				if !ok || docID == 0 {
-					// Avoid spamming logs if there are many misses. Count if needed.
-					// logrus.Debugf("missing docID for qid=%s", qid)
-					continue
+					logrus.Errorf("Missing ID?? %d", docID)
 				}
 				dst = append(dst, strconv.Itoa(docID))
 			}
-			// f32Entry goes out of scope here; nothing retained → GC can reclaim quickly.
+			if k == 1 { // Small debug
+				logrus.Debugf("len of dst: %d", len(dst))
+				logrus.Debugf("len of answer: %d", len(answer))
+				logrus.Debugf("len of entry: %d", len(entry))
+				logrus.Debugf("len of answers: %d", len(answers))
+
+			}
+
 		}
 
 		queryIDstoDocIDS[qid] = dst
+
 	}
 
 	return queryIDstoDocIDS
