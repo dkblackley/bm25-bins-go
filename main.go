@@ -158,6 +158,17 @@ func main() {
 		DB, err := ReadCSV("marco.csv")
 		bins.Must(err)
 
+		// main.go, right after ReadCSV("marco.csv")
+		nonEmpty, empty := 0, 0
+		for i := range DB {
+			if len(DB[i]) == 0 {
+				empty++
+			} else {
+				nonEmpty++
+			}
+		}
+		logrus.Infof("CSV bins: non-empty=%d empty=%d total=%d", nonEmpty, empty, len(DB))
+
 		//
 		//if len(DB) != len(DB_2) {
 		//[][][]uint64	logrus.Errorf("Something wrong %d, %d", len(DB), len(DB_2))
@@ -247,6 +258,10 @@ func doPIR(DB [][]string, bm25Vectors [][]float32, d bins.DatasetMetadata) map[s
 
 	runtime.GC()
 
+	// main.go, after new_DB & before Preprocess(...)
+	wordsPerEntry := (uint64(DIM) * 4 * uint64(max_row_size)) / 8
+	logrus.Infof("Row layout: DIM=%d, max_row_size=%d, wordsPerEntry=%d", DIM, max_row_size, wordsPerEntry)
+
 	b := uint64(len(new_DB)) * uint64(max_row_size) * uint64(DIM) * 4
 	logrus.Infof("New DB size: %.2f MiB (%d bytes)", float64(b)/(1<<20), b)
 
@@ -258,6 +273,19 @@ func doPIR(DB [][]string, bm25Vectors [][]float32, d bins.DatasetMetadata) map[s
 	start := time.Now()
 	bin_PIR := Preprocess(new_DB, DIM, max_row_size)
 	end := time.Now()
+
+	// main.go, right after Preprocess(...) returns `bin_PIR`
+	probe := 0 // pick a few bins you *know* should be non-empty
+	start_probe := probe * int(bin_PIR.DBEntrySize)
+	end_probe := start_probe + int(bin_PIR.DBEntrySize)
+	nz := 0
+	for _, w := range bin_PIR.rawDB[start_probe:end_probe] {
+		if w != 0 {
+			nz++
+			break
+		}
+	}
+	logrus.Infof("rawDB probe idx=%d hasNonZero=%t", probe, nz > 0)
 
 	queries, er := bins.LoadQueries(d.Queries)
 	bins.Must(er)
