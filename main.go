@@ -83,7 +83,7 @@ func ReadCSV(path string) ([][]string, error) {
 func main() {
 
 	// 1. Set global log level (Trace, Debug, Info, Warn, Error, Fatal, Panic)
-	logrus.SetLevel(logrus.InfoLevel)
+	logrus.SetLevel(logrus.DebugLevel)
 
 	// 2. (Optional) customize the formatter
 	logrus.SetFormatter(&logrus.TextFormatter{
