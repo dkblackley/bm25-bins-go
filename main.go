@@ -299,8 +299,8 @@ func doPIR(DB [][]string, bm25Vectors [][]float32, d bins.DatasetMetadata) map[s
 	searchTime := end.Sub(start) - maintainenceTime
 	avgTime := searchTime.Seconds() / float64(len(queries))
 
-	logrus.Infof("Search computation time: %d seconds", avgTime)
-	logrus.Infof("Search total time: %d seconds", avgTime+float64(RTT)/1000.0*float64(avg_query_size))
+	fmt.Printf("Search computation time: %f seconds", avgTime)
+	fmt.Printf("Search total time: %f seconds", avgTime+float64(RTT)/1000.0*float64(avg_query_size))
 
 	return answers
 
