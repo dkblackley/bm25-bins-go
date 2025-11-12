@@ -29,6 +29,7 @@ import (
 const MAX_UINT32 = ^uint32(0)
 const MARCO_SIZE = 8841823
 const DIM = 192
+const RTT = 50
 
 func WriteJSON(filename string, data map[string][]string) {
 	f, err := os.Create(filename)
@@ -282,10 +283,24 @@ func doPIR(DB [][]string, bm25Vectors [][]float32, d bins.DatasetMetadata) map[s
 	}
 	end = time.Now()
 
+	total_query_size := 0
+
+	for i := 0; i < len(queries); i++ {
+		text := queries[i].Text
+
+		tokeniser := strictEnglishAnalyzer()
+		tokens := tokeniser.Analyze([]byte(text))
+
+		total_query_size += len(tokens)
+	}
+
+	avg_query_size := float64(total_query_size) / float64(len(queries))
+
 	searchTime := end.Sub(start) - maintainenceTime
 	avgTime := searchTime.Seconds() / float64(len(queries))
 
-	logrus.Infof("Search time: %d seconds", avgTime)
+	logrus.Infof("Search computation time: %d seconds", avgTime)
+	logrus.Infof("Search total time: %d seconds", avgTime+float64(RTT)/1000.0*float64(avg_query_size))
 
 	return answers
 
