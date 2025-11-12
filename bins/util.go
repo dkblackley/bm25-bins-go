@@ -215,6 +215,9 @@ func FromEmbedToID(answers map[string][][]uint64, IDLookup map[string]int, dim i
 				docID, ok := IDLookup[key]
 				if !ok || docID == 0 {
 					logrus.Errorf("Missing ID?? %d", docID)
+					logrus.Errorf("Key: %s", key)
+					logrus.Errorf("QueryID: %s", qid)
+					logrus.Errorf("IDLookup Length: %d", len(IDLookup))
 				}
 				dst = append(dst, strconv.Itoa(docID))
 			}
