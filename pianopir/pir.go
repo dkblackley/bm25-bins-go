@@ -435,7 +435,7 @@ func (c *PianoPIRClient) Query(idx uint64, server *PianoPIRServer, realQuery boo
 	// now we find the first unconsumed replacement idx and val in the chunkId-th group
 	inGroupIdx := uint64(c.QueryHistogram[chunkId])
 	replIdx := c.replacementIdx[chunkId][inGroupIdx]
-	replVal := c.replacementVal[chunkId][inGroupIdx*c.config.DBEntrySize : (inGroupIdx+1)*c.config.DBEntrySize]
+	//replVal := c.replacementVal[chunkId][inGroupIdx*c.config.DBEntrySize : (inGroupIdx+1)*c.config.DBEntrySize]
 	querySet[chunkId] = replIdx
 
 	// now we make a private query
@@ -445,16 +445,17 @@ func (c *PianoPIRClient) Query(idx uint64, server *PianoPIRServer, realQuery boo
 		querySetOffset[i] = uint32(querySet[i] & (c.config.ChunkSize - 1))
 	}
 
-	response, err := server.PrivateQuery(querySetOffset)
-
-	// we revert the influence of the replacement
-	EntryXor(response, replVal, c.config.DBEntrySize)
-	// we also xor the original parity
-	EntryXor(response, c.primaryParity[hitId*c.config.DBEntrySize:(hitId+1)*c.config.DBEntrySize], c.config.DBEntrySize)
+	//TODO UNCOMMENT!
+	//response, err := server.PrivateQuery(querySetOffset)
+	//
+	//// we revert the influence of the replacement
+	//EntryXor(response, replVal, c.config.DBEntrySize)
+	//// we also xor the original parity
+	//EntryXor(response, c.primaryParity[hitId*c.config.DBEntrySize:(hitId+1)*c.config.DBEntrySize], c.config.DBEntrySize)
 	// now response is the answer.
 
 	// for now just do non private query
-	//response, err := server.NonePrivateQuery(idx)
+	response, err := server.NonePrivateQuery(idx)
 
 	// now we need to refresh
 	c.primaryShortTag[hitId] = c.backupShortTag[chunkId][inGroupIdx]
