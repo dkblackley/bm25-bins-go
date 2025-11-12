@@ -208,7 +208,7 @@ func FromEmbedToID(answers map[string][][]uint64, IDLookup map[string]int, dim i
 			f32Entry, err := DecodeEntryToVectors(entry, dim)
 			Must(err)
 
-			f32Entry = TrimZeroRows(f32Entry)
+			// f32Entry = TrimZeroRows(f32Entry)
 
 			for q := 0; q < len(f32Entry); q++ {
 				key := HashFloat32s(f32Entry[q])
@@ -223,9 +223,8 @@ func FromEmbedToID(answers map[string][][]uint64, IDLookup map[string]int, dim i
 				logrus.Debugf("len of answer: %d", len(answer))
 				logrus.Debugf("len of entry: %d", len(entry))
 				logrus.Debugf("len of answers: %d", len(answers))
-
+				logrus.Debugf("len of f32Entry: %d", len(f32Entry))
 			}
-
 		}
 
 		queryIDstoDocIDS[qid] = dst
