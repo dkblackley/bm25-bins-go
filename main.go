@@ -394,7 +394,8 @@ func Preprocess(vectors_in_bins [][][]float32, Dim int, maxRowSize int) PIRBins 
 	bar.Finish()
 	// Set up the PIR
 
-	pir := pianopir.NewSimpleBatchPianoPIR(uint64(len(vectors_in_bins)), uint64(DBEntrySize), 32, rawDB, 8)
+	pir := pianopir.NewSimpleBatchPianoPIR(uint64(len(vectors_in_bins)), uint64(DBEntrySize), uint64(len(rawDB)/2048), rawDB, 8)
+	logrus.Infof("Implied chunksize: %d", uint64(len(rawDB)/2048))
 
 	logrus.Info("PIR Ready for preprocessing")
 
