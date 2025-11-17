@@ -435,7 +435,7 @@ func (c *PianoPIRClient) Query(idx uint64, server *PianoPIRServer, realQuery boo
 	// now we find the first unconsumed replacement idx and val in the chunkId-th group
 	inGroupIdx := uint64(c.QueryHistogram[chunkId])
 	replIdx := c.replacementIdx[chunkId][inGroupIdx]
-	//replVal := c.replacementVal[chunkId][inGroupIdx*c.config.DBEntrySize : (inGroupIdx+1)*c.config.DBEntrySize]
+	replVal := c.replacementVal[chunkId][inGroupIdx*c.config.DBEntrySize : (inGroupIdx+1)*c.config.DBEntrySize]
 	querySet[chunkId] = replIdx
 
 	// now we make a private query
