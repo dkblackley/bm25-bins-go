@@ -258,10 +258,16 @@ func (p *SimpleBatchPianoPIR) Query(idx []uint64) ([][]uint64, error) {
 		//end := min((i+1)*p.config.PartitionSize, p.config.DBSize)
 
 		// case 1: if there are not enough queries, just pad with random indices in the partition
+		defaultValues := 0
 		if len(partitionQueries[i]) < queryNumToMake {
 			for j := len(partitionQueries[i]); j < queryNumToMake; j++ {
 				partitionQueries[i] = append(partitionQueries[i], DefaultValue)
+				defaultValues++
 			}
+		}
+
+		if debugOnce {
+			logrus.Infof("Num defaultValues=%d, total num queries to make %d ", defaultValues, queryNumToMake)
 		}
 
 		// now we make queryNumToMake queries to the sub PIR
