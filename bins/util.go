@@ -198,6 +198,8 @@ func FromEmbedToID(answers map[string][][]uint64, IDLookup map[string]int, dim i
 	// Result: qid -> list of DocIDs (as strings, unchanged)
 	queryIDstoDocIDS := make(map[string][]string, len(answers))
 
+	debugOnce := true
+
 	for qid, answer := range answers { // each answer = slices of entries in DB (per word)
 		// Small capacity hint to reduce reallocs; tune if you know more about average rows/entry.
 		dst := make([]string, 0, 8*len(answer))
@@ -205,15 +207,17 @@ func FromEmbedToID(answers map[string][][]uint64, IDLookup map[string]int, dim i
 		for k := 0; k < len(answer); k++ {
 			entry := answer[k]
 
-			// util.go, before DecodeEntryToVectors, inspect 'entry'
-			allZeroU64 := true
-			for i := 0; i < len(entry) && i < 8; i++ {
-				if entry[i] != 0 {
-					allZeroU64 = false
-					break
+			if debugOnce {
+				// util.go, before DecodeEntryToVectors, inspect 'entry'
+				allZeroU64 := true
+				for i := 0; i < len(entry) && i < 8; i++ {
+					if entry[i] != 0 {
+						allZeroU64 = false
+						break
+					}
 				}
+				logrus.Debugf("first 8 uint64 words allZero=%t (len(entry)=%d)", allZeroU64, len(entry))
 			}
-			logrus.Debugf("first 8 uint64 words allZero=%t (len(entry)=%d)", allZeroU64, len(entry))
 
 			f32Entry, err := DecodeEntryToVectors(entry, dim)
 			Must(err)
@@ -225,21 +229,28 @@ func FromEmbedToID(answers map[string][][]uint64, IDLookup map[string]int, dim i
 					sum0 += float64(f32Entry[0][c])
 				}
 			}
-			logrus.Debugf("entry rows=%d firstRowSum=%.6f", len(f32Entry), sum0)
+			if debugOnce {
+				logrus.Debugf("entry rows=%d firstRowSum=%.6f", len(f32Entry), sum0)
+			}
 
 			f32Entry = TrimZeroRows(f32Entry)
 
 			for q := 0; q < len(f32Entry); q++ {
 				key := HashFloat32s(f32Entry[q])
 				docID, ok := IDLookup[key]
-				if !ok || docID == 0 { // This should never be the case
-					logrus.Errorf("Missing ID?? %d", docID)
-					logrus.Errorf("Key: %s", key)
-					logrus.Errorf("QueryID: %s", qid)
-					logrus.Errorf("IDLookup Length: %d", len(IDLookup))
+				if debugOnce {
+					if !ok || docID == 0 { // This should never be the case
+						logrus.Errorf("Missing ID?? %d", docID)
+						logrus.Errorf("Key: %s", key)
+						logrus.Errorf("QueryID: %s", qid)
+						logrus.Errorf("IDLookup Length: %d", len(IDLookup))
+					}
 				}
+
 				dst = append(dst, strconv.Itoa(docID))
 			}
+
+			debugOnce = false
 
 		}
 
