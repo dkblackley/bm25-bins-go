@@ -15,7 +15,7 @@ import (
 const (
 	//FailureProbLog2     = 40
 	DefaultProgramPoint = 0x7fffffff
-	DEBUGPROB           = 2000000
+	DEBUGPROB           = 1000000
 )
 
 type PianoPIRConfig struct {
@@ -67,7 +67,7 @@ func (s *PianoPIRServer) NonePrivateQuery(idx uint64) ([]uint64, error) {
 // the private query just computes the xor sum of the elements in the idxs list
 func (s *PianoPIRServer) PrivateQuery(offsets []uint32) ([]uint64, error) {
 	ret := make([]uint64, s.config.DBEntrySize)
-	dbgOnce := rand.Intn(100) == 0
+	dbgOnce := rand.Intn(DEBUGPROB) == 0
 	// initialize ret to be all zeros
 	for i := uint64(0); i < s.config.DBEntrySize; i++ {
 		ret[i] = 0
