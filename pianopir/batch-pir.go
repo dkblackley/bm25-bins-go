@@ -313,11 +313,12 @@ func (p *SimpleBatchPianoPIR) Query(idx []uint64) ([][]uint64, error) {
 	ret := make([][]uint64, len(idx))
 	for i := 0; i < len(idx); i++ {
 		if response, ok := responses[idx[i]]; ok {
+			logrus.Errorf("Real response for %d !!!!!!", idx[i])
 			ret[i] = response
 		} else {
-			//if debugOnce {
-			logrus.Errorf("Zero response for %d", idx[i])
-			//}
+			if debugOnce {
+				logrus.Errorf("Zero response for %d", idx[i])
+			}
 			// otherwise just make a zero response
 			ret[i] = make([]uint64, p.config.DBEntrySize)
 			for j := uint64(0); j < p.config.DBEntrySize; j++ {
