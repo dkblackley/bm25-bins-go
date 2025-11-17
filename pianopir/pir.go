@@ -8,6 +8,8 @@ import (
 	"math"
 	"math/rand"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -64,9 +66,22 @@ func (s *PianoPIRServer) NonePrivateQuery(idx uint64) ([]uint64, error) {
 // the private query just computes the xor sum of the elements in the idxs list
 func (s *PianoPIRServer) PrivateQuery(offsets []uint32) ([]uint64, error) {
 	ret := make([]uint64, s.config.DBEntrySize)
+	dbgOnce := true
 	// initialize ret to be all zeros
 	for i := uint64(0); i < s.config.DBEntrySize; i++ {
 		ret[i] = 0
+	}
+
+	// in PrivateQuery, before the xor loop
+	if dbgOnce {
+		logrus.Infof("[DBG] subPIR cfg: DBSize=%d ChunkSize=%d SetSize=%d EntryWords=%d",
+			s.config.DBSize, s.config.ChunkSize, s.config.SetSize, s.config.DBEntrySize)
+		for i := uint64(0); i < s.config.SetSize && i < 4; i++ {
+			idx := uint64(offsets[i]) + i*s.config.ChunkSize
+			logrus.Infof("[DBG] i=%d offset=%d -> idx=%d (<DB? %t)",
+				i, offsets[i], idx, idx < s.config.DBSize)
+		}
+		dbgOnce = false
 	}
 
 	for i := uint64(0); i < s.config.SetSize; i++ {
