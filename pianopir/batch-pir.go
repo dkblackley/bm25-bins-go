@@ -87,6 +87,13 @@ func NewSimpleBatchPianoPIR(DBSize uint64, DBEntryByteNum uint64, BatchSize uint
 		subPIR[i] = NewPianoPIR(end-start, DBEntryByteNum, rawDB[start*DBEntrySize:end*DBEntrySize], FailureProbLog2)
 	}
 
+	for i := uint64(0); i < config.PartitionNum; i++ {
+		start := i * config.PartitionSize
+		end := min((i+1)*config.PartitionSize, config.DBSize)
+		logrus.Infof("[PART %d] start=%d end=%d subDBSize=%d",
+			i, start, end, subPIR[i].server.config.DBSize)
+	}
+
 	return &SimpleBatchPianoPIR{
 		config:                 config,
 		subPIR:                 subPIR,
@@ -182,12 +189,39 @@ func (p *SimpleBatchPianoPIR) Query(idx []uint64) ([][]uint64, error) {
 	debugOnce := rand.Intn(DEBUGPROB) == 0
 
 	for i := 0; i < len(idx); i++ {
-		partitionIdx := idx[i] / p.config.PartitionSize
-		partitionQueries[partitionIdx] = append(partitionQueries[partitionIdx], idx[i])
+		//partitionIdx := idx[i] / p.config.PartitionSize
+		//partitionQueries[partitionIdx] = append(partitionQueries[partitionIdx], idx[i])
+		//
+		//// given a global DB index `idx` you intend to fetch:
+		//part := partitionIdx
+		//local := idx[i]
 
-		// given a global DB index `idx` you intend to fetch:
-		part := partitionIdx
-		local := idx[i]
+		part := idx[i] / p.config.PartitionSize
+		partStart := part * p.config.PartitionSize
+		local := idx[i] - partStart // <--- local index inside the sub-partition
+
+		logrus.Infof("[DBG] global=%d  -> part=%d  local=%d  partStart=%d partEnd=%d",
+			idx[i], part, local, partStart, min((part+1)*p.config.PartitionSize, p.config.DBSize))
+
+		// Optional guards:
+		if part >= p.config.PartitionNum {
+			logrus.Errorf("part=%d out of range (PartitionNum=%d)", part, p.config.PartitionNum)
+		} else if local >= p.subPIR[part].config.DBSize {
+			logrus.Errorf("local=%d out of range for sub-DB (size=%d)", local, p.subPIR[part].config.DBSize)
+		} else {
+			resp, err := p.subPIR[part].server.NonePrivateQuery(local)
+			if err != nil {
+				logrus.Errorf("[DBG] NonePrivateQuery err: %v", err)
+			}
+			allZero := true
+			for k := 0; k < 8 && k < len(resp); k++ {
+				if resp[k] != 0 {
+					allZero = false
+					break
+				}
+			}
+			logrus.Infof("[DBG] direct read nonZero=%v (wordLen=%d)", !allZero, len(resp))
+		}
 
 		if debugOnce {
 			logrus.Infof("[DBG] global idx=%d  -> part=%d  local=%d  partSize=%d  partStart=%d  partEnd=%d",
