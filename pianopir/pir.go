@@ -442,7 +442,13 @@ func (c *PianoPIRClient) Query(idx uint64, server *PianoPIRServer, realQuery boo
 	// we only send the offset to the server, so that we can save some bandwidth
 	querySetOffset := make([]uint32, c.config.SetSize)
 	for i := uint64(0); i < c.config.SetSize; i++ {
-		querySetOffset[i] = uint32(querySet[i] & (c.config.ChunkSize - 1))
+		//querySetOffset[i] = uint32(querySet[i] & (c.config.ChunkSize - 1))
+		if c.config.ChunkSize&(c.config.ChunkSize-1) == 0 {
+			querySetOffset[i] = uint32(querySet[i] & (c.config.ChunkSize - 1))
+		} else {
+			querySetOffset[i] = uint32(querySet[i] % c.config.ChunkSize)
+		}
+
 	}
 
 	//TODO UNCOMMENT!
