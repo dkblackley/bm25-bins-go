@@ -333,7 +333,7 @@ func (c *PianoPIRClient) Preprocessing(rawDB []uint64) {
 			}
 			c.UpdatePreprocessing(i, tmpChunk)
 		} else {
-			//fmt.Println("preprocessing chunk ", i, "start ", start, "end ", end)
+			fmt.Println("preprocessing chunk ", i, "start ", start, "end ", end)
 			c.UpdatePreprocessing(i, rawDB[start*c.config.DBEntrySize:end*c.config.DBEntrySize])
 		}
 	}
@@ -369,7 +369,7 @@ func (c *PianoPIRClient) UpdatePreprocessing(chunkId uint64, chunk []uint64) {
 		EntryXor(c.primaryParity[i*c.config.DBEntrySize:(i+1)*c.config.DBEntrySize], chunk[offset*c.config.DBEntrySize:(offset+1)*c.config.DBEntrySize], c.config.DBEntrySize)
 	}
 
-	//fmt.Println("finished primary hints")
+	fmt.Println("finished primary hints")
 
 	// second enumerate all backup hints
 	for i := uint64(0); i < c.config.SetSize; i++ {
