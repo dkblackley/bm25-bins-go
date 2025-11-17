@@ -379,13 +379,15 @@ func (c *PianoPIRClient) UpdatePreprocessing(chunkId uint64, chunk []uint64) {
 		}
 		for j := uint64(0); j < c.maxQueryPerChunk; j++ {
 			var offset uint64 = 0
-			if c.config.ChunkSize&(c.config.ChunkSize-1) == 0 {
-				offset = PRFEvalWithLongKeyAndTag(c.longKey, c.primaryShortTag[i], uint64(chunkId)) & (c.config.ChunkSize - 1)
+			if (c.config.ChunkSize & (c.config.ChunkSize - 1)) == 0 {
+				offset = PRFEvalWithLongKeyAndTag(c.longKey, c.backupShortTag[i][j], uint64(chunkId)) & (c.config.ChunkSize - 1)
 			} else {
-				offset = PRFEvalWithLongKeyAndTag(c.longKey, c.primaryShortTag[i], uint64(chunkId)) % (c.config.ChunkSize - 1)
+				offset = PRFEvalWithLongKeyAndTag(c.longKey, c.backupShortTag[i][j], uint64(chunkId)) % c.config.ChunkSize
 			}
-			// offset := PRFEvalWithLongKeyAndTag(c.longKey, c.backupShortTag[i][j], uint64(chunkId)) & (c.config.ChunkSize - 1)
 			EntryXor(c.backupParity[i][j*c.config.DBEntrySize:(j+1)*c.config.DBEntrySize], chunk[offset*c.config.DBEntrySize:(offset+1)*c.config.DBEntrySize], c.config.DBEntrySize)
+
+			// offset := PRFEvalWithLongKeyAndTag(c.longKey, c.backupShortTag[i][j], uint64(chunkId)) & (c.config.ChunkSize - 1)
+			// EntryXor(c.backupParity[i][j*c.config.DBEntrySize:(j+1)*c.config.DBEntrySize], chunk[offset*c.config.DBEntrySize:(offset+1)*c.config.DBEntrySize], c.config.DBEntrySize)
 		}
 	}
 
