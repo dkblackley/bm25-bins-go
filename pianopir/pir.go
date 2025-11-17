@@ -66,7 +66,7 @@ func (s *PianoPIRServer) NonePrivateQuery(idx uint64) ([]uint64, error) {
 // the private query just computes the xor sum of the elements in the idxs list
 func (s *PianoPIRServer) PrivateQuery(offsets []uint32) ([]uint64, error) {
 	ret := make([]uint64, s.config.DBEntrySize)
-	dbgOnce := true
+	dbgOnce := rand.Intn(1000000) == 0
 	// initialize ret to be all zeros
 	for i := uint64(0); i < s.config.DBEntrySize; i++ {
 		ret[i] = 0
