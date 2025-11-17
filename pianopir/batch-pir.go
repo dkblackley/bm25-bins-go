@@ -200,30 +200,30 @@ func (p *SimpleBatchPianoPIR) Query(idx []uint64) ([][]uint64, error) {
 		partStart := part * p.config.PartitionSize
 		local := idx[i] - partStart // <--- local index inside the sub-partition
 
-		logrus.Infof("[DBG] global=%d  -> part=%d  local=%d  partStart=%d partEnd=%d",
-			idx[i], part, local, partStart, min((part+1)*p.config.PartitionSize, p.config.DBSize))
-
-		// Optional guards:
-		if part >= p.config.PartitionNum {
-			logrus.Errorf("part=%d out of range (PartitionNum=%d)", part, p.config.PartitionNum)
-		} else if local >= p.subPIR[part].config.DBSize {
-			logrus.Errorf("local=%d out of range for sub-DB (size=%d)", local, p.subPIR[part].config.DBSize)
-		} else {
-			resp, err := p.subPIR[part].server.NonePrivateQuery(local)
-			if err != nil {
-				logrus.Errorf("[DBG] NonePrivateQuery err: %v", err)
-			}
-			allZero := true
-			for k := 0; k < 8 && k < len(resp); k++ {
-				if resp[k] != 0 {
-					allZero = false
-					break
-				}
-			}
-			logrus.Infof("[DBG] direct read nonZero=%v (wordLen=%d)", !allZero, len(resp))
-		}
-
 		if debugOnce {
+			logrus.Infof("[DBG] global=%d  -> part=%d  local=%d  partStart=%d partEnd=%d",
+				idx[i], part, local, partStart, min((part+1)*p.config.PartitionSize, p.config.DBSize))
+
+			// Optional guards:
+			if part >= p.config.PartitionNum {
+				logrus.Errorf("part=%d out of range (PartitionNum=%d)", part, p.config.PartitionNum)
+			} else if local >= p.subPIR[part].config.DBSize {
+				logrus.Errorf("local=%d out of range for sub-DB (size=%d)", local, p.subPIR[part].config.DBSize)
+			} else {
+				resp, err := p.subPIR[part].server.NonePrivateQuery(local)
+				if err != nil {
+					logrus.Errorf("[DBG] NonePrivateQuery err: %v", err)
+				}
+				allZero := true
+				for k := 0; k < 8 && k < len(resp); k++ {
+					if resp[k] != 0 {
+						allZero = false
+						break
+					}
+				}
+				logrus.Infof("[DBG] direct read nonZero=%v (wordLen=%d)", !allZero, len(resp))
+			}
+
 			logrus.Infof("[DBG] global idx=%d  -> part=%d  local=%d  partSize=%d  partStart=%d  partEnd=%d",
 				idx, part, local, p.config.PartitionSize,
 				part*p.config.PartitionSize,
