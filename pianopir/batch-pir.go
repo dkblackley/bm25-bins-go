@@ -197,6 +197,7 @@ func (p *SimpleBatchPianoPIR) Query(idx []uint64) ([][]uint64, error) {
 		//local := idx[i]
 
 		part := idx[i] / p.config.PartitionSize
+		partitionQueries[part] = append(partitionQueries[part], idx[i]) // global idx
 		partStart := part * p.config.PartitionSize
 		local := idx[i] - partStart // <--- local index inside the sub-partition
 
