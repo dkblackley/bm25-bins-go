@@ -83,7 +83,7 @@ func NewSimpleBatchPianoPIR(DBSize uint64, DBEntryByteNum uint64, BatchSize uint
 		start := i * PartitionSize
 		end := min((i+1)*PartitionSize, DBSize)
 		// print start and end
-		//fmt.Printf("start: %v, end: %v\n", start, end)
+		fmt.Printf("start: %v, end: %v\n", start, end)
 		subPIR[i] = NewPianoPIR(end-start, DBEntryByteNum, rawDB[start*DBEntrySize:end*DBEntrySize], FailureProbLog2)
 	}
 
@@ -146,7 +146,7 @@ func (p *SimpleBatchPianoPIR) Preprocessing() {
 		go func(tid uint64) {
 			start := tid * perThreadPartitionNum
 			end := min((tid+1)*perThreadPartitionNum, p.config.PartitionNum)
-			//log.Printf("Thread %v preprocessing partitions [%v, %v)\n", tid, start, end)
+			log.Printf("Thread %v preprocessing partitions [%v, %v)\n", tid, start, end)
 			for i := start; i < end; i++ {
 				p.subPIR[i].Preprocessing()
 			}
@@ -248,7 +248,7 @@ func (p *SimpleBatchPianoPIR) Query(idx []uint64) ([][]uint64, error) {
 
 	}
 
-	//fmt.Println("partitionQueries: ", partitionQueries)
+	fmt.Println("partitionQueries: ", partitionQueries)
 
 	// we make a map from index to their responses
 	responses := make(map[uint64][]uint64)
@@ -275,39 +275,39 @@ func (p *SimpleBatchPianoPIR) Query(idx []uint64) ([][]uint64, error) {
 			if partitionQueries[i][j] == DefaultValue {
 				_, _ = p.subPIR[i].Query(0, false) // just make a dummy query
 			} else {
-				//query, _ := p.subPIR[i].Query(partitionQueries[i][j]-i*p.config.PartitionSize, true)
-				////if err != nil {
-				//
-				////log.Printf("the queries to this sub pir is: %v, the offset is %v\n", partitionQueries[i], partitionQueries[i][j]-i*p.config.PartitionSize)
-				////log.Printf("All the queries are %v\n", partitionQueries)
-				////log.Printf("SimpleBatchPianoPIR.Query: subPIR[%v].Query(%v) failed: %v\n", i, partitionQueries[i][j], err)
-				////	return nil, err
-				////	}
-				//responses[partitionQueries[i][j]] = query
+				query, err := p.subPIR[i].Query(partitionQueries[i][j]-i*p.config.PartitionSize, true)
+				if err != nil {
 
-				query, _ := p.subPIR[i].Query(partitionQueries[i][j]-i*p.config.PartitionSize, true)
-				zero := true
-				for z := 0; z < 8 && z < len(query); z++ {
-					if query[z] != 0 {
-						zero = false
-						break
-					}
-				}
-				if zero {
-					logrus.Warnf("[DBG] first-touch zero; re-issuing programmed query (part=%d local=%d)",
-						i, partitionQueries[i][j]-i*p.config.PartitionSize)
-					query, _ = p.subPIR[i].Query(partitionQueries[i][j]-i*p.config.PartitionSize, true)
+					log.Printf("the queries to this sub pir is: %v, the offset is %v\n", partitionQueries[i], partitionQueries[i][j]-i*p.config.PartitionSize)
+					log.Printf("All the queries are %v\n", partitionQueries)
+					log.Printf("SimpleBatchPianoPIR.Query: subPIR[%v].Query(%v) failed: %v\n", i, partitionQueries[i][j], err)
+					return nil, err
 				}
 				responses[partitionQueries[i][j]] = query
+
+				//query, _ := p.subPIR[i].Query(partitionQueries[i][j]-i*p.config.PartitionSize, true)
+				//zero := true
+				//for z := 0; z < 8 && z < len(query); z++ {
+				//	if query[z] != 0 {
+				//		zero = false
+				//		break
+				//	}
+				//}
+				//if zero {
+				//	logrus.Warnf("[DBG] first-touch zero; re-issuing programmed query (part=%d local=%d)",
+				//		i, partitionQueries[i][j]-i*p.config.PartitionSize)
+				//	query, _ = p.subPIR[i].Query(partitionQueries[i][j]-i*p.config.PartitionSize, true)
+				//}
+				//responses[partitionQueries[i][j]] = query
 
 			}
 		}
 	}
 
 	// print all the indices in responses
-	//for k, v := range responses {
-	//	fmt.Printf("responses[%v] = %v\n", k, v[0])
-	//	}
+	for k, v := range responses {
+		fmt.Printf("responses[%v] = %v\n", k, v[0])
+	}
 
 	// now we output the responses in the order of the queries
 	ret := make([][]uint64, len(idx))

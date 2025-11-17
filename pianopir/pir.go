@@ -180,9 +180,9 @@ func NewPianoPIRClient(config *PianoPIRConfig) *PianoPIRClient {
 	maxQueryPerChunk := 3 * uint64(float64(maxQueryNum)/float64(config.SetSize))
 	maxQueryPerChunk = (maxQueryPerChunk + config.ThreadNum - 1) / config.ThreadNum * config.ThreadNum
 
-	//fmt.Printf("maxQueryNum = %v\n", maxQueryNum)
-	//fmt.Printf("primaryHintNum = %v\n", primaryHintNum)
-	//fmt.Printf("maxQueryPerChunk = %v\n", maxQueryPerChunk)
+	fmt.Printf("maxQueryNum = %v\n", maxQueryNum)
+	fmt.Printf("primaryHintNum = %v\n", primaryHintNum)
+	fmt.Printf("maxQueryPerChunk = %v\n", maxQueryPerChunk)
 
 	masterKey = RandKey(rng)
 	return &PianoPIRClient{
@@ -310,11 +310,11 @@ func (c *PianoPIRClient) Preprocessing(rawDB []uint64) {
 		return
 	}
 
-	//log.Printf("len(rawDB) %v\n", len(rawDB))
-	//if len(rawDB) < int(c.config.ChunkSize*c.config.SetSize*c.config.DBEntrySize) {
-	//append with zeros
-	//rawDB = append(rawDB, make([]uint64, int(c.config.ChunkSize*c.config.SetSize*c.config.DBEntrySize)-len(rawDB))...)
-	//}
+	log.Printf("len(rawDB) %v\n", len(rawDB))
+	if len(rawDB) < int(c.config.ChunkSize*c.config.SetSize*c.config.DBEntrySize) {
+		// append with zeros
+		rawDB = append(rawDB, make([]uint64, int(c.config.ChunkSize*c.config.SetSize*c.config.DBEntrySize)-len(rawDB))...)
+	}
 
 	//TODO: using multiple threads
 	for i := uint64(0); i < c.config.SetSize; i++ {
@@ -349,7 +349,7 @@ func (c *PianoPIRClient) UpdatePreprocessing(chunkId uint64, chunk []uint64) {
 		//chunk = append(chunk, make([]uint64, int(c.config.ChunkSize*c.config.DBEntrySize)-len(chunk))...)
 	}
 
-	//fmt.Printf("primary hint num = %v\n", c.primaryHintNum)
+	fmt.Printf("primary hint num = %v\n", c.primaryHintNum)
 
 	// first enumerate all primar hints
 	for i := uint64(0); i < c.primaryHintNum; i++ {
@@ -361,7 +361,7 @@ func (c *PianoPIRClient) UpdatePreprocessing(chunkId uint64, chunk []uint64) {
 		} else {
 			offset = PRFEvalWithLongKeyAndTag(c.longKey, c.primaryShortTag[i], uint64(chunkId)) % (c.config.ChunkSize - 1)
 		}
-		//fmt.Printf("i = %v, offset = %v\n", i, offset)
+		fmt.Printf("i = %v, offset = %v\n", i, offset)
 		if (i+1)*c.config.DBEntrySize > uint64(len(c.primaryParity)) {
 			//fmt.Errorf("i = %v, i*c.config.DBEntrySize = %v, len(c.primaryParity) = %v", i, i*c.config.DBEntrySize, len(c.primaryParity)
 			log.Fatalf("i = %v, i*c.config.DBEntrySize = %v, len(c.primaryParity) = %v", i, i*c.config.DBEntrySize, len(c.primaryParity))
