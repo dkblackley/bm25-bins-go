@@ -315,7 +315,13 @@ func (c *PianoPIRClient) UpdatePreprocessing(chunkId uint64, chunk []uint64) {
 	// first enumerate all primar hints
 	for i := uint64(0); i < c.primaryHintNum; i++ {
 		//fmt.Println("i = ", i)
-		offset := PRFEvalWithLongKeyAndTag(c.longKey, c.primaryShortTag[i], uint64(chunkId)) & (c.config.ChunkSize - 1)
+		// offset := PRFEvalWithLongKeyAndTag(c.longKey, c.primaryShortTag[i], uint64(chunkId)) & (c.config.ChunkSize - 1)
+		var offset uint64 = 0
+		if c.config.ChunkSize&(c.config.ChunkSize-1) == 0 {
+			offset = PRFEvalWithLongKeyAndTag(c.longKey, c.primaryShortTag[i], uint64(chunkId)) & (c.config.ChunkSize - 1)
+		} else {
+			offset = PRFEvalWithLongKeyAndTag(c.longKey, c.primaryShortTag[i], uint64(chunkId)) % (c.config.ChunkSize - 1)
+		}
 		//fmt.Printf("i = %v, offset = %v\n", i, offset)
 		if (i+1)*c.config.DBEntrySize > uint64(len(c.primaryParity)) {
 			//fmt.Errorf("i = %v, i*c.config.DBEntrySize = %v, len(c.primaryParity) = %v", i, i*c.config.DBEntrySize, len(c.primaryParity)
@@ -333,7 +339,13 @@ func (c *PianoPIRClient) UpdatePreprocessing(chunkId uint64, chunk []uint64) {
 			continue
 		}
 		for j := uint64(0); j < c.maxQueryPerChunk; j++ {
-			offset := PRFEvalWithLongKeyAndTag(c.longKey, c.backupShortTag[i][j], uint64(chunkId)) & (c.config.ChunkSize - 1)
+			var offset uint64 = 0
+			if c.config.ChunkSize&(c.config.ChunkSize-1) == 0 {
+				offset = PRFEvalWithLongKeyAndTag(c.longKey, c.primaryShortTag[i], uint64(chunkId)) & (c.config.ChunkSize - 1)
+			} else {
+				offset = PRFEvalWithLongKeyAndTag(c.longKey, c.primaryShortTag[i], uint64(chunkId)) % (c.config.ChunkSize - 1)
+			}
+			// offset := PRFEvalWithLongKeyAndTag(c.longKey, c.backupShortTag[i][j], uint64(chunkId)) & (c.config.ChunkSize - 1)
 			EntryXor(c.backupParity[i][j*c.config.DBEntrySize:(j+1)*c.config.DBEntrySize], chunk[offset*c.config.DBEntrySize:(offset+1)*c.config.DBEntrySize], c.config.DBEntrySize)
 		}
 	}
@@ -343,7 +355,13 @@ func (c *PianoPIRClient) UpdatePreprocessing(chunkId uint64, chunk []uint64) {
 	// finally store the replacement
 
 	for j := uint64(0); j < c.maxQueryPerChunk; j++ {
-		offset := rng.Uint64() & (c.config.ChunkSize - 1)
+		// offset := rng.Uint64() & (c.config.ChunkSize - 1)
+		var offset uint64 = 0
+		if c.config.ChunkSize&(c.config.ChunkSize-1) == 0 {
+			offset = rng.Uint64() & (c.config.ChunkSize - 1)
+		} else {
+			offset = rng.Uint64() % (c.config.ChunkSize - 1)
+		}
 		c.replacementIdx[chunkId][j] = offset + chunkId*c.config.ChunkSize
 		copy(c.replacementVal[chunkId][j*c.config.DBEntrySize:(j+1)*c.config.DBEntrySize], chunk[offset*c.config.DBEntrySize:(offset+1)*c.config.DBEntrySize])
 	}
@@ -354,7 +372,7 @@ func (c *PianoPIRClient) UpdatePreprocessing(chunkId uint64, chunk []uint64) {
 func (c *PianoPIRClient) Query(idx uint64, server *PianoPIRServer, realQuery bool) ([]uint64, error) {
 
 	ret := make([]uint64, c.config.DBEntrySize)
-	// initialize ret to be all zeros
+	// initialize ret to be all zero[part]s
 	for i := uint64(0); i < c.config.DBEntrySize; i++ {
 		ret[i] = 0
 	}
@@ -363,7 +381,13 @@ func (c *PianoPIRClient) Query(idx uint64, server *PianoPIRServer, realQuery boo
 	if !realQuery {
 		offsets := make([]uint32, c.config.SetSize)
 		for i := uint64(0); i < c.config.SetSize; i++ {
-			offsets[i] = uint32(rand.Uint64() & (c.config.ChunkSize - 1))
+
+			if c.config.ChunkSize&(c.config.ChunkSize-1) == 0 {
+				offsets[i] = uint32(rand.Uint64() & (c.config.ChunkSize - 1))
+			} else {
+				offsets[i] = uint32(rand.Uint64() % (c.config.ChunkSize - 1))
+			}
+			// offsets[i] = uint32(rand.Uint64() & (c.config.ChunkSize - 1))
 		}
 		_, err := server.PrivateQuery(offsets)
 
@@ -403,7 +427,13 @@ func (c *PianoPIRClient) Query(idx uint64, server *PianoPIRServer, realQuery boo
 
 	hitId := uint64(DefaultProgramPoint)
 	for i := uint64(0); i < c.primaryHintNum; i++ {
-		hintOffset := PRFEvalWithLongKeyAndTag(c.longKey, c.primaryShortTag[i], uint64(chunkId)) & (c.config.ChunkSize - 1)
+		var hintOffset uint64 = 0
+		if c.config.ChunkSize&(c.config.ChunkSize-1) == 0 {
+			hintOffset = PRFEvalWithLongKeyAndTag(c.longKey, c.primaryShortTag[i], uint64(chunkId)) & (c.config.ChunkSize - 1)
+		} else {
+			hintOffset = PRFEvalWithLongKeyAndTag(c.longKey, c.primaryShortTag[i], uint64(chunkId)) % (c.config.ChunkSize - 1)
+		}
+		// hintOffset := PRFEvalWithLongKeyAndTag(c.longKey, c.primaryShortTag[i], uint64(chunkId)) & (c.config.ChunkSize - 1)
 		if hintOffset == offset {
 			// if this chunk has been programmed in this chunk before, then it shouldn't count
 			if c.primaryProgramPoint[i] == DefaultProgramPoint || (c.primaryProgramPoint[i]/c.config.ChunkSize != chunkId) {
@@ -422,7 +452,13 @@ func (c *PianoPIRClient) Query(idx uint64, server *PianoPIRServer, realQuery boo
 	querySet := make([]uint64, c.config.SetSize)
 
 	for i := uint64(0); i < c.config.SetSize; i++ {
-		hintOffset := PRFEvalWithLongKeyAndTag(c.longKey, c.primaryShortTag[hitId], uint64(i)) & (c.config.ChunkSize - 1)
+		var hintOffset uint64 = 0
+		if c.config.ChunkSize&(c.config.ChunkSize-1) == 0 {
+			hintOffset = PRFEvalWithLongKeyAndTag(c.longKey, c.primaryShortTag[i], uint64(chunkId)) & (c.config.ChunkSize - 1)
+		} else {
+			hintOffset = PRFEvalWithLongKeyAndTag(c.longKey, c.primaryShortTag[i], uint64(chunkId)) % (c.config.ChunkSize - 1)
+		}
+		// hintOffset := PRFEvalWithLongKeyAndTag(c.longKey, c.primaryShortTag[hitId], uint64(i)) & (c.config.ChunkSize - 1)
 		querySet[i] = i*c.config.ChunkSize + hintOffset
 	}
 

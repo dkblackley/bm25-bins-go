@@ -5,6 +5,8 @@ import (
 	"log"
 	"sync"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 //"encoding/binary"
@@ -176,9 +178,38 @@ func (p *SimpleBatchPianoPIR) Query(idx []uint64) ([][]uint64, error) {
 
 	// first arrange the queries into the partitions
 	partitionQueries := make([][]uint64, p.config.PartitionNum)
+	var debugOnce = true
+
 	for i := 0; i < len(idx); i++ {
 		partitionIdx := idx[i] / p.config.PartitionSize
 		partitionQueries[partitionIdx] = append(partitionQueries[partitionIdx], idx[i])
+
+		// given a global DB index `idx` you intend to fetch:
+		part := partitionIdx
+		local := idx[i]
+
+		if debugOnce {
+			logrus.Infof("[DBG] global idx=%d  -> part=%d  local=%d  partSize=%d  partStart=%d  partEnd=%d",
+				idx, part, local, p.config.PartitionSize,
+				part*p.config.PartitionSize,
+				min((part+1)*p.config.PartitionSize, p.config.DBSize))
+
+			// DIRECT sanity: read *without* PIR math to see if the data is non-zero
+			resp, err := p.subPIR[part].server.NonePrivateQuery(local)
+			if err != nil {
+				logrus.Errorf("[DBG] NonePrivateQuery err: %v", err)
+			}
+			allZero := true
+			for i := 0; i < 8 && i < len(resp); i++ {
+				if resp[i] != 0 {
+					allZero = false
+					break
+				}
+			}
+			logrus.Infof("[DBG] direct NonePrivateQuery(local) nonZero=%v  (wordLen=%d)", !allZero, len(resp))
+			debugOnce = false
+		}
+
 	}
 
 	//fmt.Println("partitionQueries: ", partitionQueries)
