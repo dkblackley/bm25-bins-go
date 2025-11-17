@@ -222,14 +222,14 @@ func FromEmbedToID(answers map[string][][]uint64, IDLookup map[string]int, dim i
 			f32Entry, err := DecodeEntryToVectors(entry, dim)
 			Must(err)
 
-			// util.go, right after DecodeEntryToVectors(...)
-			sum0 := 0.0
-			if len(f32Entry) > 0 {
-				for c := 0; c < dim && c < len(f32Entry[0]); c++ {
-					sum0 += float64(f32Entry[0][c])
-				}
-			}
 			if debugOnce {
+				// util.go, right after DecodeEntryToVectors(...)
+				sum0 := 0.0
+				if len(f32Entry) > 0 {
+					for c := 0; c < dim && c < len(f32Entry[0]); c++ {
+						sum0 += float64(f32Entry[0][c])
+					}
+				}
 				logrus.Debugf("entry rows=%d firstRowSum=%.6f", len(f32Entry), sum0)
 			}
 
@@ -239,8 +239,8 @@ func FromEmbedToID(answers map[string][][]uint64, IDLookup map[string]int, dim i
 				key := HashFloat32s(f32Entry[q])
 				docID, ok := IDLookup[key]
 				if debugOnce {
-					if !ok || docID == 0 { // This should never be the case
-						logrus.Errorf("Missing ID?? %d", docID)
+					if !ok { // This should never be the case
+						logrus.Errorf("BAD ID?? %d", docID)
 						logrus.Errorf("Key: %s", key)
 						logrus.Errorf("QueryID: %s", qid)
 						logrus.Errorf("IDLookup Length: %d", len(IDLookup))
