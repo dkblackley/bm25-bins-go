@@ -82,6 +82,20 @@ func (s *PianoPIRServer) PrivateQuery(offsets []uint32) ([]uint64, error) {
 			logrus.Infof("[DBG] i=%d offset=%d -> idx=%d (<DB? %t)",
 				i, offsets[i], idx, idx < s.config.DBSize)
 		}
+
+		for i := uint64(0); i < s.config.SetSize; i++ {
+			idx := uint64(offsets[i]) + i*s.config.ChunkSize
+			if idx >= s.config.DBSize {
+				continue
+			}
+			// probe first two words of the DB row that will be XORed in
+			base := idx * s.config.DBEntrySize
+			w0 := s.rawDB[base+0]
+			w1 := s.rawDB[base+1]
+			logrus.Debugf("[DBG] XOR row idx=%d  firstWords=[%d,%d]", idx, w0, w1)
+
+		}
+
 		dbgOnce = false
 	}
 
@@ -90,6 +104,15 @@ func (s *PianoPIRServer) PrivateQuery(offsets []uint32) ([]uint64, error) {
 
 		if idx >= s.config.DBSize {
 			continue
+		}
+
+		if dbgOnce {
+			// probe first two words of the DB row that will be XORed in
+			base := idx * s.config.DBEntrySize
+			w0 := s.rawDB[base+0]
+			w1 := s.rawDB[base+1]
+			logrus.Debugf("[DBG] XOR row idx=%d  firstWords=[%d,%d]", idx, w0, w1)
+
 		}
 
 		// xor the idx*DBEntrySize-th to (idx+1)*DBEntrySize-th elements to ret
@@ -387,6 +410,8 @@ func (c *PianoPIRClient) UpdatePreprocessing(chunkId uint64, chunk []uint64) {
 
 func (c *PianoPIRClient) Query(idx uint64, server *PianoPIRServer, realQuery bool) ([]uint64, error) {
 
+	dbgOnce := rand.Intn(DEBUGPROB/100) == 0
+
 	ret := make([]uint64, c.config.DBEntrySize)
 	// initialize ret to be all zero[part]s
 	for i := uint64(0); i < c.config.DBEntrySize; i++ {
@@ -459,6 +484,17 @@ func (c *PianoPIRClient) Query(idx uint64, server *PianoPIRServer, realQuery boo
 		}
 	}
 
+	if dbgOnce {
+		// After determining chunkId, offset, hitId
+		firstTouch := (c.primaryProgramPoint[hitId] == DefaultProgramPoint)
+		inGroupIdx := uint64(c.QueryHistogram[chunkId])
+		replIdx := c.replacementIdx[chunkId][inGroupIdx]
+		replLocalChunk := replIdx / c.config.ChunkSize
+		replLocalOff := replIdx & (c.config.ChunkSize - 1)
+		logrus.Infof("[QDBG] idx=%d chunk=%d off=%d hitId=%d firstTouch=%t replIdx=%d (replChunk=%d replOff=%d) inGroup=%d",
+			idx, chunkId, offset, hitId, firstTouch, replIdx, replLocalChunk, replLocalOff, inGroupIdx)
+	}
+
 	if hitId == DefaultProgramPoint {
 		//log.Printf("No hit hint in the primary hint table, current idx = %v", idx)
 		return ret, fmt.Errorf("no hit hint in the primary hint table")
@@ -506,11 +542,36 @@ func (c *PianoPIRClient) Query(idx uint64, server *PianoPIRServer, realQuery boo
 	//TODO UNCOMMENT!
 	response, err := server.PrivateQuery(querySetOffset)
 
+	if dbgOnce {
+		resp0 := append([]uint64(nil), response...) // copy
+		allZero := true
+		for i := 0; i < 8 && i < len(resp0); i++ {
+			if resp0[i] != 0 {
+				allZero = false
+				break
+			}
+		}
+		logrus.Infof("[QDBG] resp BEFORE peel first8AllZero=%v", allZero)
+	}
+
 	// we revert the influence of the replacement
 	EntryXor(response, replVal, c.config.DBEntrySize)
 	// we also xor the original parity
 	EntryXor(response, c.primaryParity[hitId*c.config.DBEntrySize:(hitId+1)*c.config.DBEntrySize], c.config.DBEntrySize)
 	// now response is the answer.
+
+	if dbgOnce {
+		resp1 := response
+		allZero := true
+		for i := 0; i < 8 && i < len(resp1); i++ {
+			if resp1[i] != 0 {
+				allZero = false
+				break
+			}
+		}
+		logrus.Infof("[QDBG] resp AFTER  peel first8AllZero=%v", allZero)
+
+	}
 
 	// for now just do non private query
 	//response, err := server.NonePrivateQuery(idx)

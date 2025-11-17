@@ -275,15 +275,31 @@ func (p *SimpleBatchPianoPIR) Query(idx []uint64) ([][]uint64, error) {
 			if partitionQueries[i][j] == DefaultValue {
 				_, _ = p.subPIR[i].Query(0, false) // just make a dummy query
 			} else {
-				query, _ := p.subPIR[i].Query(partitionQueries[i][j]-i*p.config.PartitionSize, true)
-				//if err != nil {
+				//query, _ := p.subPIR[i].Query(partitionQueries[i][j]-i*p.config.PartitionSize, true)
+				////if err != nil {
+				//
+				////log.Printf("the queries to this sub pir is: %v, the offset is %v\n", partitionQueries[i], partitionQueries[i][j]-i*p.config.PartitionSize)
+				////log.Printf("All the queries are %v\n", partitionQueries)
+				////log.Printf("SimpleBatchPianoPIR.Query: subPIR[%v].Query(%v) failed: %v\n", i, partitionQueries[i][j], err)
+				////	return nil, err
+				////	}
+				//responses[partitionQueries[i][j]] = query
 
-				//log.Printf("the queries to this sub pir is: %v, the offset is %v\n", partitionQueries[i], partitionQueries[i][j]-i*p.config.PartitionSize)
-				//log.Printf("All the queries are %v\n", partitionQueries)
-				//log.Printf("SimpleBatchPianoPIR.Query: subPIR[%v].Query(%v) failed: %v\n", i, partitionQueries[i][j], err)
-				//	return nil, err
-				//	}
+				query, _ := p.subPIR[i].Query(partitionQueries[i][j]-i*p.config.PartitionSize, true)
+				zero := true
+				for z := 0; z < 8 && z < len(query); z++ {
+					if query[z] != 0 {
+						zero = false
+						break
+					}
+				}
+				if zero {
+					logrus.Warnf("[DBG] first-touch zero; re-issuing programmed query (part=%d local=%d)",
+						i, partitionQueries[i][j]-i*p.config.PartitionSize)
+					query, _ = p.subPIR[i].Query(partitionQueries[i][j]-i*p.config.PartitionSize, true)
+				}
 				responses[partitionQueries[i][j]] = query
+
 			}
 		}
 	}
