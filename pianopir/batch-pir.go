@@ -301,15 +301,25 @@ func (p *SimpleBatchPianoPIR) Query(idx []uint64) ([][]uint64, error) {
 		}
 	}
 
+	for i := 0; i < int(p.config.PartitionNum); i++ {
+		used := p.subPIR[i].client.FinishedQueryNum
+		capa := p.subPIR[i].client.MaxQueryNum
+		if used+uint64(len(partitionQueries[i])) >= capa-2 {
+			p.subPIR[i].Preprocessing()
+			p.subPIR[i].client.FinishedQueryNum = 0
+			// (Optionally reset any of your wrapper-side counters for that partition)
+		}
+	}
+
 	// now test if the subPIR has reached the max query num, redo the preprocessing
 	// -2 means we want to do the preprocessing before the last query
-	if p.QueriesMadeInPartition >= p.subPIR[0].client.MaxQueryNum-2 {
-		fmt.Printf("Redo preprocessing. Made %v batches (%v queries in a partition), redo the preprocessing\n", p.FinishedBatchNum, p.QueriesMadeInPartition)
-		p.Preprocessing()
-	} else {
-		p.FinishedBatchNum += uint64(len(idx) / int(p.config.BatchSize))
-		p.QueriesMadeInPartition += uint64(queryNumToMake)
-	}
+	//if p.QueriesMadeInPartition >= p.subPIR[0].client.MaxQueryNum-2 {
+	//	fmt.Printf("Redo preprocessing. Made %v batches (%v queries in a partition), redo the preprocessing\n", p.FinishedBatchNum, p.QueriesMadeInPartition)
+	//	p.Preprocessing()
+	//} else {
+	//	p.FinishedBatchNum += uint64(len(idx) / int(p.config.BatchSize))
+	//	p.QueriesMadeInPartition += uint64(queryNumToMake)
+	//}
 
 	return ret, nil
 }
