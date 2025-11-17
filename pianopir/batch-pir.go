@@ -3,6 +3,7 @@ package pianopir
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -178,7 +179,7 @@ func (p *SimpleBatchPianoPIR) Query(idx []uint64) ([][]uint64, error) {
 
 	// first arrange the queries into the partitions
 	partitionQueries := make([][]uint64, p.config.PartitionNum)
-	var debugOnce = true
+	debugOnce := rand.Intn(1000000) == 0
 
 	for i := 0; i < len(idx); i++ {
 		partitionIdx := idx[i] / p.config.PartitionSize
