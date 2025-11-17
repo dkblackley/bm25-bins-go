@@ -15,7 +15,7 @@ import (
 const (
 	//FailureProbLog2     = 40
 	DefaultProgramPoint = 0x7fffffff
-	DEBUGPROB           = 500000
+	DEBUGPROB           = 2000000
 )
 
 type PianoPIRConfig struct {
