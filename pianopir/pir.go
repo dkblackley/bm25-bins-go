@@ -4,7 +4,6 @@ import (
 	"fmt"
 	//"encoding/binary"
 
-	"log"
 	"math"
 	"math/rand"
 	"time"
@@ -49,7 +48,7 @@ func (s *PianoPIRServer) NonePrivateQuery(idx uint64) ([]uint64, error) {
 	}
 
 	if idx >= s.config.DBSize {
-		//log.Fatalf("idx %v is out of range", idx)
+		//logrus.Fatalf("idx %v is out of range", idx)
 		if idx < s.config.ChunkSize*s.config.SetSize {
 			// caused by the padding
 			return ret, nil
@@ -180,9 +179,9 @@ func NewPianoPIRClient(config *PianoPIRConfig) *PianoPIRClient {
 	maxQueryPerChunk := 3 * uint64(float64(maxQueryNum)/float64(config.SetSize))
 	maxQueryPerChunk = (maxQueryPerChunk + config.ThreadNum - 1) / config.ThreadNum * config.ThreadNum
 
-	fmt.Printf("maxQueryNum = %v\n", maxQueryNum)
-	fmt.Printf("primaryHintNum = %v\n", primaryHintNum)
-	fmt.Printf("maxQueryPerChunk = %v\n", maxQueryPerChunk)
+	logrus.Printf("maxQueryNum = %v\n", maxQueryNum)
+	logrus.Printf("primaryHintNum = %v\n", primaryHintNum)
+	logrus.Printf("maxQueryPerChunk = %v\n", maxQueryPerChunk)
 
 	masterKey = RandKey(rng)
 	return &PianoPIRClient{
@@ -229,14 +228,14 @@ func (c *PianoPIRClient) LocalStorageSize() float64 {
 }
 
 func (c *PianoPIRClient) PrintStorageBreakdown() {
-	fmt.Printf("primary hint short tag = %v\n", c.primaryHintNum*4)
-	fmt.Printf("primary parity = %v\n", c.primaryHintNum*c.config.DBEntryByteNum)
-	fmt.Printf("primary program point = %v\n", c.primaryHintNum*4)
+	logrus.Printf("primary hint short tag = %v\n", c.primaryHintNum*4)
+	logrus.Printf("primary parity = %v\n", c.primaryHintNum*c.config.DBEntryByteNum)
+	logrus.Printf("primary program point = %v\n", c.primaryHintNum*4)
 	totalBackupHintNum := c.config.SetSize * c.maxQueryPerChunk
-	fmt.Printf("replacement indices = %v\n", totalBackupHintNum*4)
-	fmt.Printf("replacement values = %v\n", totalBackupHintNum*c.config.DBEntryByteNum)
-	fmt.Printf("backup short tag = %v\n", totalBackupHintNum*4)
-	fmt.Printf("backup parities = %v\n", totalBackupHintNum*c.config.DBEntryByteNum)
+	logrus.Printf("replacement indices = %v\n", totalBackupHintNum*4)
+	logrus.Printf("replacement values = %v\n", totalBackupHintNum*c.config.DBEntryByteNum)
+	logrus.Printf("backup short tag = %v\n", totalBackupHintNum*4)
+	logrus.Printf("backup parities = %v\n", totalBackupHintNum*c.config.DBEntryByteNum)
 }
 
 func (c *PianoPIRClient) Initialization() {
@@ -310,7 +309,7 @@ func (c *PianoPIRClient) Preprocessing(rawDB []uint64) {
 		return
 	}
 
-	log.Printf("len(rawDB) %v\n", len(rawDB))
+	logrus.Printf("len(rawDB) %v\n", len(rawDB))
 	if len(rawDB) < int(c.config.ChunkSize*c.config.SetSize*c.config.DBEntrySize) {
 		// append with zeros
 		rawDB = append(rawDB, make([]uint64, int(c.config.ChunkSize*c.config.SetSize*c.config.DBEntrySize)-len(rawDB))...)
@@ -333,7 +332,7 @@ func (c *PianoPIRClient) Preprocessing(rawDB []uint64) {
 			}
 			c.UpdatePreprocessing(i, tmpChunk)
 		} else {
-			fmt.Println("preprocessing chunk ", i, "start ", start, "end ", end)
+			logrus.Println("preprocessing chunk ", i, "start ", start, "end ", end)
 			c.UpdatePreprocessing(i, rawDB[start*c.config.DBEntrySize:end*c.config.DBEntrySize])
 		}
 	}
@@ -345,15 +344,15 @@ func (c *PianoPIRClient) UpdatePreprocessing(chunkId uint64, chunk []uint64) {
 	rng := rand.New(rand.NewSource(seed))
 
 	if len(chunk) < int(c.config.ChunkSize*c.config.DBEntrySize) {
-		fmt.Println("not enough chunk size")
+		logrus.Println("not enough chunk size")
 		//chunk = append(chunk, make([]uint64, int(c.config.ChunkSize*c.config.DBEntrySize)-len(chunk))...)
 	}
 
-	fmt.Printf("primary hint num = %v\n", c.primaryHintNum)
+	logrus.Printf("primary hint num = %v\n", c.primaryHintNum)
 
 	// first enumerate all primar hints
 	for i := uint64(0); i < c.primaryHintNum; i++ {
-		//fmt.Println("i = ", i)
+		//logrus.Println("i = ", i)
 		// offset := PRFEvalWithLongKeyAndTag(c.longKey, c.primaryShortTag[i], uint64(chunkId)) & (c.config.ChunkSize - 1)
 		var offset uint64 = 0
 		if c.config.ChunkSize&(c.config.ChunkSize-1) == 0 {
@@ -361,15 +360,15 @@ func (c *PianoPIRClient) UpdatePreprocessing(chunkId uint64, chunk []uint64) {
 		} else {
 			offset = PRFEvalWithLongKeyAndTag(c.longKey, c.primaryShortTag[i], uint64(chunkId)) % (c.config.ChunkSize - 1)
 		}
-		fmt.Printf("i = %v, offset = %v\n", i, offset)
+		logrus.Debugf("i = %v, offset = %v\n", i, offset)
 		if (i+1)*c.config.DBEntrySize > uint64(len(c.primaryParity)) {
-			//fmt.Errorf("i = %v, i*c.config.DBEntrySize = %v, len(c.primaryParity) = %v", i, i*c.config.DBEntrySize, len(c.primaryParity)
-			log.Fatalf("i = %v, i*c.config.DBEntrySize = %v, len(c.primaryParity) = %v", i, i*c.config.DBEntrySize, len(c.primaryParity))
+			//logrus.Errorf("i = %v, i*c.config.DBEntrySize = %v, len(c.primaryParity) = %v", i, i*c.config.DBEntrySize, len(c.primaryParity)
+			logrus.Fatalf("i = %v, i*c.config.DBEntrySize = %v, len(c.primaryParity) = %v", i, i*c.config.DBEntrySize, len(c.primaryParity))
 		}
 		EntryXor(c.primaryParity[i*c.config.DBEntrySize:(i+1)*c.config.DBEntrySize], chunk[offset*c.config.DBEntrySize:(offset+1)*c.config.DBEntrySize], c.config.DBEntrySize)
 	}
 
-	fmt.Println("finished primary hints")
+	logrus.Debugf("finished primary hints")
 
 	// second enumerate all backup hints
 	for i := uint64(0); i < c.config.SetSize; i++ {
@@ -391,7 +390,7 @@ func (c *PianoPIRClient) UpdatePreprocessing(chunkId uint64, chunk []uint64) {
 		}
 	}
 
-	//fmt.Println("finished backup hints")
+	//logrus.Println("finished backup hints")
 
 	// finally store the replacement
 
@@ -407,7 +406,7 @@ func (c *PianoPIRClient) UpdatePreprocessing(chunkId uint64, chunk []uint64) {
 		copy(c.replacementVal[chunkId][j*c.config.DBEntrySize:(j+1)*c.config.DBEntrySize], chunk[offset*c.config.DBEntrySize:(offset+1)*c.config.DBEntrySize])
 	}
 
-	//fmt.Println("finished replacement")
+	//logrus.Println("finished replacement")
 }
 
 func (c *PianoPIRClient) Query(idx uint64, server *PianoPIRServer, realQuery bool) ([]uint64, error) {
@@ -438,7 +437,7 @@ func (c *PianoPIRClient) Query(idx uint64, server *PianoPIRServer, realQuery boo
 	}
 
 	if idx >= c.config.DBSize {
-		log.Fatalf("idx %v is out of range", idx)
+		logrus.Fatalf("idx %v is out of range", idx)
 
 		// return an empty entry and an error
 		return ret, fmt.Errorf("idx %v is out of range", idx)
@@ -451,9 +450,9 @@ func (c *PianoPIRClient) Query(idx uint64, server *PianoPIRServer, realQuery boo
 
 	// now we need to make a real query
 	if c.FinishedQueryNum >= c.MaxQueryNum {
-		log.Printf("fnished query = %v", c.FinishedQueryNum)
-		log.Printf("max query num = %v", c.MaxQueryNum)
-		log.Printf("exceed the maximum number of queries")
+		logrus.Printf("fnished query = %v", c.FinishedQueryNum)
+		logrus.Printf("max query num = %v", c.MaxQueryNum)
+		logrus.Printf("exceed the maximum number of queries")
 		return ret, fmt.Errorf("exceed the maximum number of queries")
 	}
 
@@ -461,8 +460,8 @@ func (c *PianoPIRClient) Query(idx uint64, server *PianoPIRServer, realQuery boo
 	offset := idx % c.config.ChunkSize
 
 	if c.QueryHistogram[chunkId] >= c.maxQueryPerChunk {
-		log.Printf("Too many queries in chunk %v", chunkId)
-		log.Printf("Max query per chunk = %v", c.maxQueryPerChunk)
+		logrus.Printf("Too many queries in chunk %v", chunkId)
+		logrus.Printf("Max query per chunk = %v", c.maxQueryPerChunk)
 		return ret, fmt.Errorf("too many queries in chunk %v", chunkId)
 	}
 
@@ -498,7 +497,7 @@ func (c *PianoPIRClient) Query(idx uint64, server *PianoPIRServer, realQuery boo
 	}
 
 	if hitId == DefaultProgramPoint {
-		//log.Printf("No hit hint in the primary hint table, current idx = %v", idx)
+		//logrus.Printf("No hit hint in the primary hint table, current idx = %v", idx)
 		return ret, fmt.Errorf("no hit hint in the primary hint table")
 	}
 
@@ -518,7 +517,7 @@ func (c *PianoPIRClient) Query(idx uint64, server *PianoPIRServer, realQuery boo
 
 	// if it's programmed, we need to enforce it
 	if c.primaryProgramPoint[hitId] != DefaultProgramPoint {
-		//log.Printf("hitId = %v, c.primaryProgramPoint[hitId] = %v", hitId, c.primaryProgramPoint[hitId])
+		//logrus.Printf("hitId = %v, c.primaryProgramPoint[hitId] = %v", hitId, c.primaryProgramPoint[hitId])
 		querySet[c.primaryProgramPoint[hitId]/c.config.ChunkSize] = c.primaryProgramPoint[hitId]
 	}
 
@@ -603,7 +602,7 @@ func NewPianoPIR(DBSize uint64, DBEntryByteNum uint64, rawDB []uint64, FailurePr
 
 	// assert that the rawDB is of the correct size
 	if uint64(len(rawDB)) != DBSize*DBEntrySize {
-		log.Fatalf("Piano PIR len(rawDB) = %v; want %v", len(rawDB), DBSize*DBEntrySize)
+		logrus.Fatalf("Piano PIR len(rawDB) = %v; want %v", len(rawDB), DBSize*DBEntrySize)
 	}
 
 	targetChunkSize := uint64(2 * math.Sqrt(float64(DBSize)))
@@ -647,7 +646,7 @@ func (p *PianoPIR) DummyPreprocessing() {
 func (p *PianoPIR) Query(idx uint64, realQuery bool) ([]uint64, error) {
 
 	if p.client.FinishedQueryNum == p.client.MaxQueryNum {
-		fmt.Printf("exceed the maximum number of queries %v and redo preprocessing\n", p.client.MaxQueryNum)
+		logrus.Printf("exceed the maximum number of queries %v and redo preprocessing\n", p.client.MaxQueryNum)
 		p.client.Preprocessing(p.server.rawDB)
 	}
 

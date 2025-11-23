@@ -27,7 +27,9 @@ import (
 )
 
 const MAX_UINT32 = ^uint32(0)
-const MARCO_SIZE = 8841823
+
+// const MARCO_SIZE = 8841823
+const MARCO_SIZE = 1105 //Debug size
 const DIM = 192
 const RTT = 50
 
@@ -84,15 +86,16 @@ func ReadCSV(path string) ([][]string, error) {
 func main() {
 
 	// 1. Set global log level (Trace, Debug, Info, Warn, Error, Fatal, Panic)
-	logrus.SetLevel(logrus.DebugLevel)
+	logrus.SetLevel(logrus.WarnLevel)
 
 	// 2. (Optional) customize the formatter
 	logrus.SetFormatter(&logrus.TextFormatter{
 		FullTimestamp: true,
 	})
 
-	root := "../datasets"
-	// root := "/home/yelnat/Documents/Nextcloud/10TB-STHDD/datasets/"
+	// root := "../datasets"
+	// root := "/home/yelnat/Documents/Nextcloud/10TB-STHDD/datasets"
+	root := "/home/yelnat/Nextcloud/10TB-STHDD/datasets"
 	//debugScifactFull(
 	//	"index_scifact",
 	//	root+"/scifact/queries.jsonl",
@@ -139,7 +142,8 @@ func main() {
 
 		// Grab the data in normalised size bytes:
 
-		bm25Vectors, err := bins.LoadFloat32MatrixFromNpy(root+"/Son/my_vectors_192.npy", MARCO_SIZE, DIM)
+		//bm25Vectors, err := bins.LoadFloat32MatrixFromNpy(root+"/Son/my_vectors_192.npy", MARCO_SIZE, DIM)
+		bm25Vectors, err := bins.LoadFloat32MatrixFromNpy("my_vector_reduced.npy", MARCO_SIZE, DIM)
 		bins.Must(err)
 
 		//reader, _ := bluge.OpenReader(bluge.DefaultConfig(d.IndexDir))
@@ -148,14 +152,14 @@ func main() {
 		//config := bins.Config{
 		//	K:         100,
 		//	D:         1,
-		//	MaxBins:   MARCO_SIZE / 10,
+		//	MaxBins:   MARCO_SIZE / 4,
 		//	Threshold: 3,
 		//}
 		//var DB = bins.MakeUnigramDB(reader, d, config)
-		//err = WriteCSV("marco.csv", DB)
+		//err = WriteCSV("debug_marco.csv", DB)
 		//bins.Must(err)
-
-		DB, err := ReadCSV("marco.csv")
+		//
+		DB, err := ReadCSV("debug_marco.csv")
 		bins.Must(err)
 
 		// main.go, right after ReadCSV("marco.csv")
@@ -239,12 +243,15 @@ func doPIR(DB [][]string, bm25Vectors [][]float32, d bins.DatasetMetadata) map[s
 		row := make([][]float32, 0, max_row_size)
 		// cap columns
 		upto := len(entry)
-		if upto > max_row_size {
+		if upto > max_row_size { // This does nothing??
+			logrus.Warnf("Row exceeded the maximum row size!!")
 			upto = max_row_size
 		}
 		for j := 0; j < upto; j++ {
 			id64, err := strconv.ParseUint(entry[j], 10, 32)
 			bins.Must(err)
+			//TODO REMOVE ONCE DONE DEBUGGING!
+			id64 = id64 % MARCO_SIZE
 			row = append(row, bm25Vectors[id64]) // shares the row slice; no copy
 		}
 		for len(row) < max_row_size {
@@ -295,7 +302,10 @@ func doPIR(DB [][]string, bm25Vectors [][]float32, d bins.DatasetMetadata) map[s
 
 	// windowSize := queryEngine.PIR.SupportBatchNum / (uint64(*stepN) * uint64(*parallelN)) // For logging
 	start = time.Now()
+	// TODO REMOVE THIS
+	bar := progressbar.Default(int64(len(queries)), fmt.Sprintf("Answering Queries"))
 	for i := 0; i < len(queries); i++ {
+		bar.Add(1)
 
 		q := queries[i]
 
@@ -309,6 +319,7 @@ func doPIR(DB [][]string, bm25Vectors [][]float32, d bins.DatasetMetadata) map[s
 			maintainenceTime += end.Sub(start)
 		}
 	}
+	bar.Finish()
 	end = time.Now()
 
 	total_query_size := 0
@@ -350,6 +361,8 @@ type PIRBins struct {
 func Preprocess(vectors_in_bins [][][]float32, Dim int, maxRowSize int) PIRBins {
 	DBEntrySize := Dim * 4 * maxRowSize // bytes per DB entry (maxRowSize vectors × Dim float32s)
 	DBSize := len(vectors_in_bins)
+	// What does words per entry even do? It was originally divided by 8?
+	// A single 'word' should be how many uint64s are required to re-make the entry
 	wordsPerEntry := DBEntrySize / 8
 
 	// FIX: allocate enough uint64s for all entries
@@ -397,6 +410,7 @@ func Preprocess(vectors_in_bins [][][]float32, Dim int, maxRowSize int) PIRBins 
 	setSize = (setSize + 3) / 4 * 4               // round up to multiple of 4
 	logrus.Infof("setSize: %d", setSize)
 
+	//pir := pianopir.NewSimpleBatchPianoPIR(uint64(len(vectors_in_bins)), uint64(DBEntrySize), 32, rawDB, 8)
 	pir := pianopir.NewSimpleBatchPianoPIR(uint64(len(vectors_in_bins)), uint64(DBEntrySize), 32, rawDB, 8)
 
 	logrus.Info("PIR Ready for preprocessing")
@@ -471,8 +485,19 @@ func BinSearch(queries bins.Query, d int, binsDB PIRBins) [][]uint64 {
 	// convert the query text to bin indexs
 
 	indices := make_indices(queries.Text, uint(d), uint(binsDB.N))
+	prev_size := len(indices)
+
+	//for len(indices) != 32 { // Pad indicea to batch size
+	//	indices = append(indices, 1)
+	//}
 	responses, err := binsDB.PIR.Query(indices)
 	bins.Must(err)
+
+	responses = responses[:prev_size]
+
+	//for len(responses) != prev_size {
+	//	responses = append(responses[:1], responses[2:]...)
+	//}
 
 	return responses
 }

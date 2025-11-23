@@ -77,7 +77,14 @@ func MakeUnigramDB(reader *bluge.Reader, dataset DatasetMetadata, config Config)
 	// No sets in go, gotta make my own...
 	set := make(map[string]struct{})
 
+	//TODO Remove this debug statement
+	counter := 0
+
 	for _, doc := range docs {
+
+		if counter == 1105 {
+			break
+		}
 
 		title := doc.Title
 		text := doc.Text
@@ -102,9 +109,11 @@ func MakeUnigramDB(reader *bluge.Reader, dataset DatasetMetadata, config Config)
 		}
 
 		bar.Add(1)
+		counter++
 	}
 
 	bar.Finish()
+	counter = 0
 
 	// Very 'hacky' a mapping to a 'set' which is a mapping to structs. Is converted into a regular bin at the end.
 	setsBins := make(map[uint]map[string]struct{})
@@ -113,7 +122,12 @@ func MakeUnigramDB(reader *bluge.Reader, dataset DatasetMetadata, config Config)
 
 	for word := range set {
 
+		if counter == 1105 {
+			break
+		}
+
 		bar.Add(1)
+		counter++
 		// Perform BM25 search using each individual word as the Query
 
 		matchTitle := bluge.NewMatchQuery(word).SetField("title")
