@@ -155,7 +155,7 @@ func main() {
 		config := bins.Config{
 			K:         k,
 			D:         1,
-			MaxBins:   MARCO_SIZE / 15,
+			MaxBins:   MARCO_SIZE / 100,
 			Threshold: k / 10,
 		}
 		var DB = bins.MakeUnigramDB(reader, d, config)

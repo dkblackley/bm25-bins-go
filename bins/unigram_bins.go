@@ -222,8 +222,8 @@ func MakeUnigramDB(reader *bluge.Reader, dataset DatasetMetadata, config Config)
 		sumValues += v
 	}
 
-	logrus.Infof("Vocab size/trueDBsize =", numKeys)
-	logrus.Infof("Number of duplicates =", sumValues-numKeys)
+	logrus.Infof("Vocab size/trueDBsize =%d", numKeys)
+	logrus.Infof("Number of duplicates =%d", (sumValues - numKeys))
 
 	return binsSlice
 
