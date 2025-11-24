@@ -87,7 +87,7 @@ func ReadCSV(path string) ([][]string, error) {
 func main() {
 
 	// 1. Set global log level (Trace, Debug, Info, Warn, Error, Fatal, Panic)
-	logrus.SetLevel(logrus.WarnLevel)
+	logrus.SetLevel(logrus.InfoLevel)
 
 	// 2. (Optional) customize the formatter
 	logrus.SetFormatter(&logrus.TextFormatter{
@@ -146,6 +146,8 @@ func main() {
 		bm25Vectors, err := bins.LoadFloat32MatrixFromNpy(root+"/Son/my_vectors_192.npy", MARCO_SIZE, DIM)
 		//bm25Vectors, err := bins.LoadFloat32MatrixFromNpy("my_vector_reduced.npy", MARCO_SIZE, DIM)
 		bins.Must(err)
+
+		logrus.Infof("Size of vectors: %d", len(bm25Vectors))
 
 		reader, _ := bluge.OpenReader(bluge.DefaultConfig(d.IndexDir))
 		defer reader.Close()
