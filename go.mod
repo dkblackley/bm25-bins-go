@@ -1,6 +1,6 @@
 module github.com/dkblackley/bm25-bins-go
 
-go 1.24.5
+go 1.24.0
 
 require (
 	github.com/blugelabs/bluge v0.2.2
