@@ -112,7 +112,18 @@ func MakeUnigramDB(reader *bluge.Reader, dataset DatasetMetadata, config Config)
 
 	bar = progressbar.Default(int64(len(docs)), fmt.Sprintf("Putting items into bins %s", dataset.Name))
 
+	// make the map
+	counts := make(map[string]int)
+
 	for word := range set {
+
+		if _, ok := counts[word]; !ok {
+			// not in map yet → initialize to 1
+			counts[word] = 1
+		} else {
+			// already there → increment
+			counts[word]++
+		}
 
 		bar.Add(1)
 		// Perform BM25 search using each individual word as the Query
@@ -201,6 +212,18 @@ func MakeUnigramDB(reader *bluge.Reader, dataset DatasetMetadata, config Config)
 		}
 
 	}
+
+	// counters
+	numKeys := 0
+	sumValues := 0
+
+	for _, v := range counts {
+		numKeys++
+		sumValues += v
+	}
+
+	logrus.Infof("Vocab size/trueDBsize =", numKeys)
+	logrus.Infof("Number of duplicates =", sumValues-numKeys)
 
 	return binsSlice
 

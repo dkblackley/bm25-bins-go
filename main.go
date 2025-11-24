@@ -28,7 +28,6 @@ import (
 )
 
 const MAX_UINT32 = ^uint32(0)
-
 const MARCO_SIZE = 8841823
 
 // const MARCO_SIZE = 1105 //Debug size
