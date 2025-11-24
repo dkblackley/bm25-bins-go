@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/blugelabs/bluge"
 	"github.com/blugelabs/bluge/analysis"
 	"github.com/blugelabs/bluge/analysis/char"
 	"github.com/blugelabs/bluge/analysis/lang/en"
@@ -93,9 +94,9 @@ func main() {
 		FullTimestamp: true,
 	})
 
-	// root := "../datasets"
+	root := "../datasets"
 	// root := "/home/yelnat/Documents/Nextcloud/10TB-STHDD/datasets"
-	root := "/home/yelnat/Nextcloud/10TB-STHDD/datasets"
+	// root := "/home/yelnat/Nextcloud/10TB-STHDD/datasets"
 	//debugScifactFull(
 	//	"index_scifact",
 	//	root+"/scifact/queries.jsonl",
@@ -142,25 +143,25 @@ func main() {
 
 		// Grab the data in normalised size bytes:
 
-		//bm25Vectors, err := bins.LoadFloat32MatrixFromNpy(root+"/Son/my_vectors_192.npy", MARCO_SIZE, DIM)
-		bm25Vectors, err := bins.LoadFloat32MatrixFromNpy("my_vector_reduced.npy", MARCO_SIZE, DIM)
+		bm25Vectors, err := bins.LoadFloat32MatrixFromNpy(root+"/Son/my_vectors_192.npy", MARCO_SIZE, DIM)
+		//bm25Vectors, err := bins.LoadFloat32MatrixFromNpy("my_vector_reduced.npy", MARCO_SIZE, DIM)
 		bins.Must(err)
 
-		//reader, _ := bluge.OpenReader(bluge.DefaultConfig(d.IndexDir))
-		//defer reader.Close()
-		//
-		//config := bins.Config{
-		//	K:         100,
-		//	D:         1,
-		//	MaxBins:   MARCO_SIZE / 4,
-		//	Threshold: 3,
-		//}
-		//var DB = bins.MakeUnigramDB(reader, d, config)
-		//err = WriteCSV("debug_marco.csv", DB)
-		//bins.Must(err)
-		//
-		DB, err := ReadCSV("debug_marco.csv")
+		reader, _ := bluge.OpenReader(bluge.DefaultConfig(d.IndexDir))
+		defer reader.Close()
+		k := uint(100)
+		config := bins.Config{
+			K:         k,
+			D:         1,
+			MaxBins:   MARCO_SIZE / 15,
+			Threshold: k / 10,
+		}
+		var DB = bins.MakeUnigramDB(reader, d, config)
+		err = WriteCSV("marco.csv", DB)
 		bins.Must(err)
+
+		//DB, err := ReadCSV("debug_marco.csv")
+		//bins.Must(err)
 
 		// main.go, right after ReadCSV("marco.csv")
 		nonEmpty, empty := 0, 0
@@ -251,7 +252,7 @@ func doPIR(DB [][]string, bm25Vectors [][]float32, d bins.DatasetMetadata) map[s
 			id64, err := strconv.ParseUint(entry[j], 10, 32)
 			bins.Must(err)
 			//TODO REMOVE ONCE DONE DEBUGGING!
-			id64 = id64 % MARCO_SIZE
+			// id64 = id64 % MARCO_SIZE
 			row = append(row, bm25Vectors[id64]) // shares the row slice; no copy
 		}
 		for len(row) < max_row_size {
@@ -324,7 +325,8 @@ func doPIR(DB [][]string, bm25Vectors [][]float32, d bins.DatasetMetadata) map[s
 
 	total_query_size := 0
 
-	for i := 0; i < len(queries); i++ {
+	// TODO change to len(queries)
+	for i := 0; i < 300; i++ {
 		text := queries[i].Text
 
 		tokeniser := strictEnglishAnalyzer()
