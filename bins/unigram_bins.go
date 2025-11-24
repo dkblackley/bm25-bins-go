@@ -67,6 +67,8 @@ func MakeUnigramDB(reader *bluge.Reader, dataset DatasetMetadata, config Config)
 	//Must(er)
 	//qrels, er := loadQrels(dataset.Qrels)
 	// Must(er)
+	// MAP for debugging
+	counts := make(map[string]int)
 	docs, er := LoadCorpus(dataset.OriginalDir)
 	Must(er)
 
@@ -95,6 +97,14 @@ func MakeUnigramDB(reader *bluge.Reader, dataset DatasetMetadata, config Config)
 			word := fmt.Sprintf("%s", t.Term)
 			_, ok := set[word]
 
+			if _, ok := counts[word]; !ok {
+				// not in map yet → initialize to 1
+				counts[word] = 1
+			} else {
+				// already there → increment
+				counts[word]++
+			}
+
 			if !ok {
 				total_items_in_set++
 			}
@@ -112,18 +122,7 @@ func MakeUnigramDB(reader *bluge.Reader, dataset DatasetMetadata, config Config)
 
 	bar = progressbar.Default(int64(len(docs)), fmt.Sprintf("Putting items into bins %s", dataset.Name))
 
-	// make the map
-	counts := make(map[string]int)
-
 	for word := range set {
-
-		if _, ok := counts[word]; !ok {
-			// not in map yet → initialize to 1
-			counts[word] = 1
-		} else {
-			// already there → increment
-			counts[word]++
-		}
 
 		bar.Add(1)
 		// Perform BM25 search using each individual word as the Query
