@@ -27,6 +27,8 @@ export GOPATH="${SLURM_TMPDIR:-/tmp}/${USER}/gopath"
 export GOMODCACHE="${GOPATH}/pkg/mod"
 mkdir -p "$GOMODCACHE"
 
+export GOTOOLCHAIN=local
+
 # If compute nodes can't reach the internet, pre-vendor deps and uncomment:
 # export GOFLAGS="-mod=vendor"
 
